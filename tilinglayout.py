@@ -13,24 +13,75 @@ class QTilingLayout(QGridLayout):
     def vsplit(self, old_widget, new_widget, put_before=False):
         self._split(old_widget, new_widget, False, put_before=put_before)
 
+    def _get_independent_blocks(self, horizontal):
+        """
+        Finds groups of rows (if horizontal is True, else columns) that are
+        considered independent in the sense that they don't share widgets
+        spanning multiple rows (if horizontal is True, else columns) between
+        them.
+
+        returns: list of starting indexes for each group
+        """
+        blocks = []
+        curr_items = []
+        for outer in range(0, self.rowCount() if horizontal else
+                self.columnCount()):
+            prev_item = None
+            prev_items = curr_items
+            curr_items = []
+            depends_on_prev = False
+
+            for inner in range(0, self.columnCount() if horizontal else
+                    self.rowCount()):
+                pos = (outer, inner) if horizontal else (inner, outer)
+                item = self.itemAtPosition(*pos)
+
+                if item is prev_item:
+                    continue
+
+                prev_item = item
+                curr_items.append(item)
+                if item in prev_items:
+                    depends_on_prev = True
+
+            if not depends_on_prev:
+                blocks.append(outer)
+
+        return blocks
+
     def _split(self, old_widget, new_widget, horizontal, put_before=False):
+        blocks = get_independent_blocks(horizontal)
         curr_pos = self.getItemPosition(self.indexOf(old_widget))
+        span = curr_pos[2] if horiztonal else curr_pos[3]
+        if span == self._unity:
+            # we need to insert a new row/column
+            pass
+        else:
+            # we need to shrink other widgets to make room for the new one
+            end = self.rowCount() if horizontal else self.columnCount()
+            prev_item = None
+            for index in range(0, end):
+                item = self.itemAtPosition(*(
+                    (index, curr_pos[1])
+                    if horizontal else
+                    (curr_pos[0], index)
+                ))
+                if item is prev_item:
+                    continue
+                else:
+                    prev_item = item
+                item_pos = self.getItemPosition(self.indexOf(item.widget()))
+
+
         offset = (curr_pos[0] if horizontal else curr_pos[1]) + 1
-        end = self.rowCount() if horizontal else self.columnCount()
         panes_to_displace = []
 
         for index in range(offset, end):
-            item = self.itemAtPosition(*(
-                (index, curr_pos[1])
-                if horizontal else
-                (curr_pos[0], index)
-            ))
 
             if not item:
                 # should not be needed once I figure rowspans and colspans
                 continue
-            item_pos = (item.widget(),
-                        self.getItemPosition(self.indexOf(item.widget())))
+            item_pos = (item.widget())
             if item_pos not in panes_to_displace:
                 panes_to_displace.append(item_pos)
 
