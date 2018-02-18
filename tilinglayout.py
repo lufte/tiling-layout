@@ -1,12 +1,12 @@
 from PyQt5.QtWidgets import QGridLayout
 from bisect import bisect
 import itertools
+import pdb
 
 class QTilingLayout(QGridLayout):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._unity = 1
 
     def hsplit(self, old_widget, new_widget, put_before=False):
         self._split(old_widget, new_widget, True, put_before=put_before)
@@ -14,59 +14,84 @@ class QTilingLayout(QGridLayout):
     def vsplit(self, old_widget, new_widget, put_before=False):
         self._split(old_widget, new_widget, False, put_before=put_before)
 
+    def _split(self, old_widget, new_widget, horizontal, put_before=False):
+        """Splits old_widget and inserts new_widget in the available space.
+
+        Args:
+            old_widget: The widget to be splitted.
+            new_widget: The widget to insert in the new available space.
+            horizontal: True if splitting in the X axis, False for Y.
+            put_before: True if new_widget is to be put before old_widget.
+        """
+        curr_pos = self.getItemPosition(self.indexOf(old_widget))
+        span = curr_pos[2] if horizontal else curr_pos[3]
+        prev_supporters = self._get_support_widgets(old_widget, not horizontal,
+                                                    True)
+        next_supporters = self._get_support_widgets(old_widget, not horizontal,
+                                                    False)
+        max_span = max((
+            (self.getItemPosition(self.indexOf(w))[2]
+             if horizontal else
+             self.getItemPosition(self.indexOf(w))[3])
+            for w in prev_supporters.union(next_supporters)
+        )) if prev_supporters or next_supporters else 0
+
+        if span >= max_span * 2:
+            if span % 2 != 0:
+                self._multiply_spans(horizontal, 2)
+                curr_pos = self.getItemPosition(self.indexOf(old_widget))
+                span = curr_pos[2] if horizontal else curr_pos[3]
+            self.removeWidget(old_widget)
+            old_widget_pos = (curr_pos[0],
+                              curr_pos[1],
+                              curr_pos[2] / (2 if horizontal else 1),
+                              curr_pos[3] / (1 if horizontal else 2))
+            new_widget_pos = (curr_pos[0] + (span / 2 if horizontal else 0),
+                              curr_pos[1] + (0 if horizontal else span / 2),
+                              curr_pos[2] / (2 if horizontal else 1),
+                              curr_pos[3] / (1 if horizontal else 2))
+            self.addWidget(old_widget, *old_widget_pos)
+            self.addWidget(new_widget, *new_widget_pos)
+        else:
+            # TODO: optimize this, we iterate supporters like a thousand times
+            widgets_to_displace = [
+                (widget, self.getItemPosition(self.indexOf(widget)))
+                for widget in next_supporters
+            ]
+            for widget in next_supporters:
+                self.removeWidget(widget)
+            for widget, pos in widgets_to_displace:
+                new_pos = (pos[0] + (span if horizontal else 0),
+                           pos[1] + (0 if horizontal else span),
+                           pos[2],
+                           pos[3])
+                self.addWidget(widget, *new_pos)
+            new_widget_pos = (curr_pos[0] + (span if horizontal else 0),
+                              curr_pos[1] + (0 if horizontal else span),
+                              curr_pos[2],
+                              curr_pos[3])
+            self.addWidget(new_widget, *new_widget_pos)
+            self._adjust_sizes(not horizontal)
+
     def _get_critical_block(self, horizontal, i, j):
         pass
 
-    def _get_independent_blocks(self, horizontal):
-        """
-        Finds groups of rows (if horizontal is True, else columns) that are
-        considered independent in the sense that they don't share widgets
-        spanning multiple rows (if horizontal is True, else columns) between
-        them.
-
-        returns: list of starting indexes for each group
-        """
-        blocks = []
-        curr_items = []
-        for outer in range(0, self.rowCount() if horizontal else
-                self.columnCount()):
-            prev_item = None
-            prev_items = curr_items
-            curr_items = []
-            depends_on_prev = False
-
-            for inner in range(0, self.columnCount() if horizontal else
-                    self.rowCount()):
-                pos = (outer, inner) if horizontal else (inner, outer)
-                item = self.itemAtPosition(*pos)
-
-                if item is prev_item:
-                    continue
-
-                prev_item = item
-                curr_items.append(item)
-                if item in prev_items:
-                    depends_on_prev = True
-
-            if not depends_on_prev:
-                blocks.append(outer)
-
-        return blocks
-
-    def _get_min_span(start, end, horizontal):
-        min_span = None
-        for outer in range(start, end):
-            for inner in range(0, self.rowCount() if horizontal else
-                    self.columnCount()):
-                pos = (inner, outer) if horizontal else (outer, inner)
-                item = self.itemAtPosition(*pos)
-                item_pos = self.getItemPosition(self.indexOf(item.widget()))
-                span = item_pos[2] if horizontal else item_pos[3]
-                if not min_span or span < min_span:
-                    min_span = span
-        return min_span
-
     def _get_support_widgets(self, widget, horizontal, before):
+        """Returns a set of "support" widgets for the specified widget.
+
+        A support widget is a widget that is (directly or indirectly) "pushed"
+        by the specified widget when it grows. A widget has support widgets in
+        four directions: up (horizontal=False, before=True), right
+        (horizontal=True, before, False), down (horizontal=False, before=False)
+        and left (horizontal=True, before=True).
+
+        Args:
+            widget: The widget for which to find supporters.
+            horizontal: The axis in which to find supporters (always the
+                        opposite of the splitting axis).
+            before: The direction in which to find supporters (True for
+                    left/up, False for right/down; depending on horizontal).
+        """
         supporters = set()
         pos = self.getItemPosition(self.indexOf(widget))
         if horizontal:
@@ -83,98 +108,98 @@ class QTilingLayout(QGridLayout):
             for index in range(start, end):
                 curr_pos = (index, pivot) if horizontal else (pivot, index)
                 item = self.itemAtPosition(*curr_pos)
-                supporters.add(item.widget())
+                if item:  # this function can be called in the resizing process
+                    supporters.add(item.widget())
         return supporters.union(
             *(self._get_support_widgets(w, horizontal, before)
               for w in supporters)
         )
 
-    def _split(self, old_widget, new_widget, horizontal, put_before=False):
-        ind_blocks = self._get_independent_blocks(horizontal)
-        support_widgets = self._get_support_widgets(old_widget)
-        curr_pos = self.getItemPosition(self.indexOf(old_widget))
-        span = curr_pos[2] if horiztonal else curr_pos[3]
-        curr_block_index = bisect(blocks,
-                                  curr_pos[1] if horizontal else curr_pos[0])
-        curr_block_pos = (blocks[curr_block_index - 1],
-                          blocks[curr_block_index])
-        min_span = _get_min_span(*curr_block_pos, horizontal)
+    def _adjust_sizes(self, horizontal):
+        """Resizes all widgets that have available space to grow.
 
-        # Dentro del bloque independiente afectado, busco la columna (o fila)
-        # de soporte, es decir, todos los widgets sobre los cuales el widget
-        # actual está apoyado, y todos los que están apoyados sobre él. De esos
-        # widgets, solo aquellos que no tengan el tamaño mínimo podrán
-        # achicarse, y si el widget actual ya tiene el tamaño mínimo se busca
-        # un nuevo tamaño mínimo.
-        # Si el widget actual tiene el doble o más espacio que el span mínimo,
-        # entonces solo él se achica
+        Args:
+            horizontal: The axis in which to resize widgets (always the
+                        opposite of the splitting axis).
+        """
+        growable_widgets = []
+        prev_item = None
+        for outer in range(0, self.rowCount() if horizontal else
+                self.columnCount()):
+            for inner in range(0, self.columnCount() if horizontal else
+                    self.rowCount()):
+                pos = (outer, inner) if horizontal else (inner, outer)
+                item = self.itemAtPosition(*pos)
 
-
-
-
-
-
-
-
-
-        if span == self._unity:
-            # we need to insert a new row/column
-            pass
-        else:
-            # we need to shrink other widgets to make room for the new one
-            end = self.rowCount() if horizontal else self.columnCount()
-            prev_item = None
-            for index in range(0, end):
-                item = self.itemAtPosition(*(
-                    (index, curr_pos[1])
-                    if horizontal else
-                    (curr_pos[0], index)
-                ))
-                if item is prev_item:
+                if not item or item is prev_item:
                     continue
-                else:
-                    prev_item = item
-                item_pos = self.getItemPosition(self.indexOf(item.widget()))
 
+                prev_item = item
+                if self._grow_space(item.widget(), horizontal):
+                    growable_widgets.append(item.widget())
 
-        offset = (curr_pos[0] if horizontal else curr_pos[1]) + 1
-        panes_to_displace = []
+        for widget in growable_widgets:
+            self._grow(widget, horizontal)
 
-        for index in range(offset, end):
+    def _grow_space(self, widget, horizontal):
+        """Returns the amount of space a widget has available to grow.
 
-            if not item:
-                # should not be needed once I figure rowspans and colspans
-                continue
-            item_pos = (item.widget())
-            if item_pos not in panes_to_displace:
-                panes_to_displace.append(item_pos)
+        Args:
+            horizontal: The axis in which to find space (always the opposite
+                        of the splitting axis).
+        """
+        pos = self.getItemPosition(self.indexOf(widget))
+        pivot, start, end = ((pos[1] + pos[3], pos[0], pos[0] + pos[2])
+                             if horizontal else
+                             (pos[0] + pos[2], pos[1], pos[1] + pos[3]))
+        limit = self.columnCount() if horizontal else self.rowCount()
+        if pivot < limit:
+            for index in range(start, end):
+                curr_pos = (index, pivot) if horizontal else (pivot, index)
+                item = self.itemAtPosition(*curr_pos)
+                if not item:
+                    space = 0
+                    while not item and pivot < limit:
+                        space += 1
+                        pivot += 1
+                        curr_pos = ((index, pivot) if horizontal
+                                    else (pivot, index))
+                        item = self.itemAtPosition(*curr_pos)
+                    return space
+        return 0
 
-        for pane, old_pos in reversed(panes_to_displace):
-            self.removeWidget(pane)
-            self.addWidget(pane,
-                        old_pos[0] + (1 if horizontal else 0),
-                        old_pos[1] + (1 if not horizontal else 0),
-                        old_pos[2], old_pos[3])
+    def _grow(self, widget, horizontal):
+        """Resizes a particular widget.
 
-        self.layout().addWidget(new_widget,
-                                curr_pos[0] + (1 if horizontal else 0),
-                                curr_pos[1] + (1 if not horizontal else 0),
-                                1, 1)
+        Args:
+            horizontal: The axis in which to resize (always the opposite of
+                        the splitting axis).
+        """
+        # We need to ask again, because after one widget has grown it's
+        # possible that another one that previously could, now can't anymore.
+        space = self._grow_space(widget, horizontal)
 
-    def _intersect(self, area1, area2):
-        return (
-            (
-                (area2[0] < area1[0] < area2[0] + area2[2])
-                or
-                (area1[0] < area2[0] < area1[0] + area1[2])
-            )
-            and
-            (
-                (area2[1] < area1[1] < area2[1] + area2[3])
-                or
-                (area1[1] < area2[1] < area1[1] + area1[3])
-            )
-        )
+        next_supporters = self._get_support_widgets(widget, horizontal, False)
+        # TODO: resize the critical block,not only "widget"
+        widgets_to_displace = [
+            (widget, self.getItemPosition(self.indexOf(widget)))
+            for widget in next_supporters
+        ]
+        for supporter in next_supporters:
+            self.removeWidget(supporter)
+        for supporter, pos in widgets_to_displace:
+            new_pos = (pos[0] + (0 if horizontal else space),
+                       pos[1] + (space if horizontal else 0),
+                       pos[2],
+                       pos[3])
+            self.addWidget(supporter, *new_pos)
+        curr_pos = self.getItemPosition(self.indexOf(widget))
+        new_widget_pos = (curr_pos[0],
+                          curr_pos[1],
+                          curr_pos[2] + (0 if horizontal else space),
+                          curr_pos[3] + (space if horizontal else 0))
+        self.removeWidget(widget)
+        self.addWidget(widget, *new_widget_pos)
 
     def _multiply_spans(self, horizontal, factor):
         item = self.itemAt(0)
@@ -192,4 +217,3 @@ class QTilingLayout(QGridLayout):
 
         for widget, pos in widgets:
             self.layout().addWidget(widget, *pos)
-

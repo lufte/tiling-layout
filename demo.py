@@ -4,7 +4,7 @@ import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 from tilinglayout import QTilingLayout
-from PyQt5.QtCore import QFileInfo
+from PyQt5.QtCore import QFileInfo, pyqtRemoveInputHook
 from PyQt5.QtWidgets import (QApplication, QCheckBox, QDialog,
         QDialogButtonBox, QFrame, QGroupBox, QLabel, QLineEdit, QListWidget,
         QTabWidget, QVBoxLayout, QWidget, QMainWindow)
@@ -45,6 +45,7 @@ class Pane(QWidget):
 if __name__ == '__main__':
 
     app = QApplication(sys.argv)
+    pyqtRemoveInputHook()
     window = QMainWindow()
     cw = CentralWidget(window)
     window.setCentralWidget(cw)
