@@ -123,18 +123,19 @@ class QTilingLayout(QGridLayout):
                         opposite of the splitting axis).
         """
         growable_widgets = []
-        prev_item = None
-        for outer in range(0, self.rowCount() if horizontal else
-                self.columnCount()):
-            for inner in range(0, self.columnCount() if horizontal else
-                    self.rowCount()):
-                pos = (outer, inner) if horizontal else (inner, outer)
+        visited_widgets = []
+
+        for outer in range(0, self.columnCount() if horizontal else
+                self.rowCount()):
+            for inner in range(0, self.rowCount() if horizontal else
+                    self.columnCount()):
+                pos = (inner, outer) if horizontal else (outer, inner)
                 item = self.itemAtPosition(*pos)
 
-                if not item or item is prev_item:
+                if not item or item.widget() in visited_widgets:
                     continue
 
-                prev_item = item
+                visited_widgets.append(item.widget())
                 if self._grow_space(item.widget(), horizontal):
                     growable_widgets.append(item.widget())
 
