@@ -122,7 +122,12 @@ class QTilingLayout(QGridLayout):
             horizontal: The axis in which to resize widgets (always the
                         opposite of the splitting axis).
         """
-        growable_widgets = []
+        widget_to_grow = self._find_growable_widget(horizontal)
+        if widget_to_grow:
+            self._grow(widget_to_grow, horizontal)
+            self._adjust_sizes(horizontal)
+
+    def _find_growable_widget(self, horizontal):
         visited_widgets = []
 
         for outer in range(0, self.columnCount() if horizontal else
@@ -137,10 +142,10 @@ class QTilingLayout(QGridLayout):
 
                 visited_widgets.append(item.widget())
                 if self._grow_space(item.widget(), horizontal):
-                    growable_widgets.append(item.widget())
+                    return item.widget()
 
-        for widget in growable_widgets:
-            self._grow(widget, horizontal)
+        return None
+
 
     def _grow_space(self, widget, horizontal):
         """Returns the amount of space a widget has available to grow.
