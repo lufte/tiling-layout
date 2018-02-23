@@ -29,12 +29,13 @@ class QTilingLayout(QGridLayout):
                                                     True)
         next_supporters = self._get_support_widgets(old_widget, not horizontal,
                                                     False)
+        supporters = prev_supporters.union(next_supporters)
         max_span = max((
             (self.getItemPosition(self.indexOf(w))[2]
              if horizontal else
              self.getItemPosition(self.indexOf(w))[3])
-            for w in prev_supporters.union(next_supporters)
-        )) if prev_supporters or next_supporters else 0
+            for w in supporters
+        )) if supporters else 0
 
         if span >= max_span * 2:
             if span % 2 != 0:
@@ -54,6 +55,10 @@ class QTilingLayout(QGridLayout):
             self.addWidget(new_widget, *new_widget_pos)
         else:
             # TODO: optimize this, we iterate supporters like a thousand times
+            # TODO: using the old_widget's span and leaving everything else
+            # unotuched is not enough. if the new_widget's span does not equal
+            # the support line's minimum, we should adjust some of the other
+            # sizes as well
             widgets_to_displace = [
                 (widget, self.getItemPosition(self.indexOf(widget)))
                 for widget in next_supporters
@@ -71,12 +76,13 @@ class QTilingLayout(QGridLayout):
                               curr_pos[2],
                               curr_pos[3])
             self.addWidget(new_widget, *new_widget_pos)
-            self._adjust_sizes(not horizontal)
+            adjust = True
+            pdb.set_trace()
+            if adjust:
+                self._adjust_sizes(not horizontal)
+            # self._adjust_sizes2(not horizontal, supporters)
 
-    def _get_critical_block(self, horizontal, i, j):
-        pass
-
-    def _get_support_widgets(self, widget, horizontal, before):
+    def _get_support_widgets(self, widget, horizontal, before, level=None):
         """Returns a set of "support" widgets for the specified widget.
 
         A support widget is a widget that is (directly or indirectly) "pushed"
@@ -91,6 +97,9 @@ class QTilingLayout(QGridLayout):
                         opposite of the splitting axis).
             before: The direction in which to find supporters (True for
                     left/up, False for right/down; depending on horizontal).
+            level: How many levels of recursion (support widgets of the support
+                   widgets) to process before returning. If None, keep looking
+                   for support widgets until the end of the grid.
         """
         supporters = set()
         pos = self.getItemPosition(self.indexOf(widget))
@@ -110,10 +119,195 @@ class QTilingLayout(QGridLayout):
                 item = self.itemAtPosition(*curr_pos)
                 if item:  # this function can be called in the resizing process
                     supporters.add(item.widget())
-        return supporters.union(
-            *(self._get_support_widgets(w, horizontal, before)
-              for w in supporters)
+        if level == 0:
+            return supporters
+        else:
+            next_level = None if level is None else level - 1
+            return supporters.union(
+                *(self._get_support_widgets(w, horizontal, before, level)
+                  for w in supporters)
+            )
+
+    def _adjust_sizes2(self, horizontal, support_widgets):
+        empty_block = self._find_empty_block(horizontal)
+        if empty_block:
+            self._fill_empty_block(empty_block, horizontal, support_widgets)
+            self._adjust_sizes2(horizontal, support_widgets)
+
+    def _find_empty_block(self, horizontal):
+        """Finds a block made entirely of empty space.
+
+        Returns a tuple in the form of (i, j, rowspan, colspan). the block is
+        of the largest possible size.
+
+        Args:
+            horizontal: If true, the block is searched from left to right
+                        scanning each column at a time, else it is search from
+                        top to bottom scanning each row at a time. It's always
+                        the opposite of the splitting axis.
+        """
+        positions = (
+            (inner, outer) if horizontal else (outer, inner)
+            for outer in
+            range(0, self.columnCount() if horizontal else self.rowCount())
+            for inner in
+            range(0, self.rowCount() if horizontal else self.columnCount())
         )
+
+        empty_block_start = None
+        for pos in positions:
+            item = self.itemAtPosition(*pos)
+            if item is None:
+                empty_block_start = pos
+                break
+
+        if empty_block_start:
+            # We know where it starts, now find its dimensions
+            rowspan = colspan = 1
+            for i in range(empty_block_start[0] + 1, self.rowCount()):
+                if not self.itemAtPosition(i, empty_block_start[1]):
+                    rowspan += 1
+                else:
+                    break
+            for j in range(empty_block_start[1] + 1, self.columnCount()):
+                if not self.itemAtPosition(empty_block_start[0], j):
+                    colspan += 1
+                else:
+                    break
+            return (*empty_block_start, rowspan, colspan)
+        else:
+            # No empty blocks
+            return None
+
+    def _fill_empty_block(self, empty_block, horizontal, excluded_widgets):
+        """Finds a critical block to grow and fill the empty space.
+
+        Args:
+            empty_block: The position of the empty block in the form
+                         (i, j, rowspan, colspan).
+            hozirontal: If true, the widgets are searched to the left of the
+                        empty block, otherwise they are searched upwards. It's
+                        always the opposite of the splitting axis.
+            excluded_widgets: Set of widgets which can't grow so they must
+                              not be considered for filling empty spaces.
+        """
+        if horizontal:
+            pass
+        else:
+            base_widget = (
+                self.itemAtPosition(empty_block[0],
+                                    empty_block[1] - 1).widget()
+                if horizontal else
+                self.itemAtPosition(empty_block[0] - 1,
+                                    empty_block[1]).widget()
+            )
+            base_widget_pos = self.getItemPosition(self.indexOf(base_widget))
+            is_aligned = (base_widget_pos[0] == empty_block[0]
+                          if horizontal else
+                          base_widget_pos[1] == empty_block[1])
+            if is_aligned:
+                increment = True
+                start = (base_widget_pos[0]
+                         if horizontal else
+                         base_widget_pos[1])
+                end = (base_widget_pos[0] + base_widget_pos[2] - 1
+                       if horizontal else
+                       base_widget_pos[1] + base_widget_pos[3] - 1)
+            else:
+                # This widget isn't aligned with the empty block, so we start
+                # on the other end
+                increment = False
+                base_widget = (
+                    self.itemAtPosition(
+                        empty_block[0] + empty_block[2] - 1,
+                        empty_block[1] - 1).widget()
+                    if horizontal else
+                    self.itemAtPosition(
+                        empty_block[0] - 1,
+                        empty_block[1] + empty_block[3] - 1).widget()
+                )
+                base_widget_pos = self.getItemPosition(
+                    self.indexOf(base_widget)
+                )
+                start = (base_widget_pos[0] + base_widget_pos[2] - 1
+                         if horizontal else
+                         base_widget_pos[1] + base_widget_pos[3] - 1)
+                end = (base_widget_pos[0]
+                       if horizontal else
+                       base_widget_pos[1])
+
+            # Now to find out the size
+            size = base_widget[3] if horizontal else base_widget_pos[2]
+            next_item = (
+                self.itemAtPosition(start, empty_block[1] - 1 - size)
+                if horizontal else
+                self.itemAtPosition(empty_block[0] - 1 - size, start)
+            )
+            while next_item and next_item.widget() not in excluded_widgets:
+                pos = self.getItemPosition(self.indexOf(next_item.widget()))
+                size += pos[3] if horizontal else pos[2]
+                next_item = (
+                    self.itemAtPosition(start, empty_block[1] - 1 - size)
+                    if horizontal else
+                    self.itemAtPosition(empty_block[0] - 1 - size, start)
+                )
+
+            # Finally, move along the axis (incrementing the index if
+            # "increment" is True, decrementing it otherwise) and grow the
+            # block until it's rectangular
+            is_rectangular = False
+            index_limit = (empty_block[1] if horizontal
+                           else empty_block[0]) - 1 - size
+            while not is_rectangular:
+                index = (empty_block[1] if horizontal else empty_block[0]) - 1
+                aligned = True
+                prev_widget = None
+                while aligned and index > index_limit:
+                    pos = (end, index) if horizontal else (index, end)
+                    widget = self.itemAtPosition(*pos).widget()
+
+                    if widget is prev_widget:
+                        continue
+                    prev_widget - widget
+
+                    widget_pos = self.getItemPosition(self.indexOf(widget))
+                    if horizontal:
+                        edge = (widget_pos[0] if increment
+                                else widget_pos[0] + widget_pos[2] - 1)
+                    else:
+                        edge = (widget_pos[1] if increment
+                                else widget_pos[1] + widget_pos[3] - 1)
+                    aligned = end == edge
+                    index -= widget_pos[3] if horizontal else widget_pos[2]
+
+                if aligned:
+                    is_rectangular = True
+                elif increment:
+                    pos = ((end + 1, empty_block[1] - 1) if horizontal
+                           else (empty_block[0] - 1, end + 1))
+                    next_neighbor = self.itemAtPosition(*pos).widget()
+                    next_neighbor_pos = self.getItemPosition(
+                        self.indexOf(next_neighbor))
+                    end += next_neighbor_pos[2 if horizontal else 3]
+                else:
+                    pos = ((end - 1, empty_block[1] - 1) if horizontal
+                           else (empty_block[0] - 1, end - 1))
+                    next_neighbor_pos = self.getItemPosition(
+                        self.indexOf(next_neighbor))
+                    end -= next_neighbor_pos[2 if horizontal else 3]
+
+            i, j, rowspan, colspan = (
+                empty_block[1 if horizontal else 0] - size,
+                min(start, end),
+                size,
+                abs(end - start) + 1
+            )
+        # self._grow_block((i, j, rowspan, colspan), empty_block[2])
+        return i, j, rowspan, colspan
+
+
+
+
 
     def _adjust_sizes(self, horizontal):
         """Resizes all widgets that have available space to grow.
