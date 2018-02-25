@@ -10,83 +10,72 @@ sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 from tilinglayout import QTilingLayout
 
 
-class IndependentBlocksTestCase1(unittest.TestCase):
+class TransposedMethodsTestCase(unittest.TestCase):
 
-    # ┌─┬─┬─┬─┐
-    # ├─┤ │ │ │
-    # ├─┼─┴─┼─┤
-    # ├─┤   │ │
-    # └─┴───┴─┘
+    #  ┌───┬──────────┐
+    #  │   │    1     │
+    #  │ 0 ├───┬──────┤
+    #  │   │ 2 │      │
+    #  ├───┴───┤  3   │
+    #  │   4   │      │
+    #  └───────┴──────┘
     def setUp(self):
         self.app = QApplication([])
         self.layout = QTilingLayout()
-        self.layout.addWidget(QWidget(), 0, 0, 1, 1)
-        self.layout.addWidget(QWidget(), 1, 0, 1, 1)
-        self.layout.addWidget(QWidget(), 0, 1, 2, 1)
-        self.layout.addWidget(QWidget(), 0, 2, 2, 1)
-        self.layout.addWidget(QWidget(), 0, 3, 2, 1)
-        self.layout.addWidget(QWidget(), 2, 0, 1, 1)
-        self.layout.addWidget(QWidget(), 3, 0, 1, 1)
-        self.layout.addWidget(QWidget(), 2, 1, 2, 2)
-        self.layout.addWidget(QWidget(), 2, 3, 2, 1)
+        self.widgets = [QWidget() for _ in range(5)]
+        self.layout.addWidget(self.widgets[0], 0, 0, 2, 1)
+        self.layout.addWidget(self.widgets[1], 0, 1, 1, 3)
+        self.layout.addWidget(self.widgets[2], 1, 1, 1, 1)
+        self.layout.addWidget(self.widgets[3], 1, 2, 2, 2)
+        self.layout.addWidget(self.widgets[4], 2, 0, 1, 2)
 
-    def test_horizontal_independent_blocks(self):
-        self.assertEqual(self.layout._get_independent_blocks(True), [0, 2])
+    def test_add_widget(self):
+        new_widget = QWidget()
+        self.layout._add_widget(new_widget, 3, 0, 1, 4, False)
+        self.assertEqual(
+            self.layout.getItemPosition(self.layout.indexOf(new_widget)),
+            (3, 0, 1, 4)
+        )
+        self.layout.removeWidget(new_widget)
 
-    def test_vertical_independent_blocks(self):
-        self.assertEqual(self.layout._get_independent_blocks(False), [0, 1, 3])
+        self.layout._add_widget(new_widget, 3, 0, 1, 4, True)
+        self.assertEqual(
+            self.layout.getItemPosition(self.layout.indexOf(new_widget)),
+            (0, 3, 4, 1)
+        )
+        self.layout.removeWidget(new_widget)
 
+    def test_row_count(self):
+        self.assertEqual(self.layout._row_count(False),
+                         self.layout.rowCount())
+        self.assertEqual(self.layout._row_count(True),
+                         self.layout.columnCount())
 
-class IndependentBlocksTestCase2(unittest.TestCase):
+    def test_column_count(self):
+        self.assertEqual(self.layout._column_count(False),
+                         self.layout.columnCount())
+        self.assertEqual(self.layout._column_count(True),
+                         self.layout.rowCount())
 
-    # ┌─┐
-    # └─┘
-    def setUp(self):
-        self.app = QApplication([])
-        self.layout = QTilingLayout()
-        self.layout.addWidget(QWidget(), 0, 0, 1, 1)
+    def test_item_at_position(self):
+        for i in range(self.layout.rowCount()):
+            for j in range(self.layout.columnCount()):
+                self.assertEqual(self.layout.itemAtPosition(i, j),
+                                 self.layout._item_at_position(i, j, False))
+                self.assertEqual(self.layout.itemAtPosition(j, i),
+                                 self.layout._item_at_position(i, j, True))
 
-    def test_horizontal_independent_blocks(self):
-        self.assertEqual(self.layout._get_independent_blocks(True), [0])
-
-    def test_vertical_independent_blocks(self):
-        self.assertEqual(self.layout._get_independent_blocks(False), [0])
-
-
-class IndependentBlocksTestCase3(unittest.TestCase):
-
-    # ┌─┬─┬─┬─┐
-    # ├─┼─┼─┼─┤
-    # ├─┼─┼─┼─┤
-    # ├─┼─┼─┼─┤
-    # └─┴─┴─┴─┘
-    def setUp(self):
-        self.app = QApplication([])
-        self.layout = QTilingLayout()
-        self.layout.addWidget(QWidget(), 0, 0, 1, 1)
-        self.layout.addWidget(QWidget(), 0, 1, 1, 1)
-        self.layout.addWidget(QWidget(), 0, 2, 1, 1)
-        self.layout.addWidget(QWidget(), 0, 3, 1, 1)
-        self.layout.addWidget(QWidget(), 1, 0, 1, 1)
-        self.layout.addWidget(QWidget(), 1, 1, 1, 1)
-        self.layout.addWidget(QWidget(), 1, 2, 1, 1)
-        self.layout.addWidget(QWidget(), 1, 3, 1, 1)
-        self.layout.addWidget(QWidget(), 2, 0, 1, 1)
-        self.layout.addWidget(QWidget(), 2, 1, 1, 1)
-        self.layout.addWidget(QWidget(), 2, 2, 1, 1)
-        self.layout.addWidget(QWidget(), 2, 3, 1, 1)
-        self.layout.addWidget(QWidget(), 3, 0, 1, 1)
-        self.layout.addWidget(QWidget(), 3, 1, 1, 1)
-        self.layout.addWidget(QWidget(), 3, 2, 1, 1)
-        self.layout.addWidget(QWidget(), 3, 3, 1, 1)
-
-    def test_horizontal_independent_blocks(self):
-        self.assertEqual(self.layout._get_independent_blocks(True),
-                         [0, 1, 2, 3])
-
-    def test_vertical_independent_blocks(self):
-        self.assertEqual(self.layout._get_independent_blocks(False),
-                         [0, 1, 2, 3])
+    def test_get_item_position(self):
+        for widget in self.widgets:
+            pos = self.layout.getItemPosition(self.layout.indexOf(widget))
+            self.assertEqual(pos,
+                             self.layout._get_item_position(widget, False))
+            self.assertEqual((pos[1], pos[0], pos[3], pos[2]),
+                             self.layout._get_item_position(widget, True))
+        self.assertRaises(ValueError, self.layout._get_item_position,
+                          QWidget(), False)
+        self.assertRaises(ValueError, self.layout._get_item_position,
+                          QWidget(), True)
 
 
 class SupportWidgetsTestCase(unittest.TestCase):
@@ -144,8 +133,8 @@ class SupportWidgetsTestCase(unittest.TestCase):
         self.assertNotIn(self.widgets[15], supporters)
 
     def test_horizontal_after_support_widgets(self):
-        supporters = self.layout._get_support_widgets(self.widgets[8], True,
-                                                      False)
+        supporters = self.layout._get_support_widgets(self.widgets[8], False,
+                                                      True)
         self.assertNotIn(self.widgets[0], supporters)
         self.assertNotIn(self.widgets[1], supporters)
         self.assertNotIn(self.widgets[2], supporters)
@@ -164,8 +153,8 @@ class SupportWidgetsTestCase(unittest.TestCase):
         self.assertNotIn(self.widgets[15], supporters)
 
     def test_vertical_before_support_widgets(self):
-        supporters = self.layout._get_support_widgets(self.widgets[12], False,
-                                                      True)
+        supporters = self.layout._get_support_widgets(self.widgets[12], True,
+                                                      False)
         self.assertIn(self.widgets[0], supporters)
         self.assertIn(self.widgets[1], supporters)
         self.assertNotIn(self.widgets[2], supporters)
