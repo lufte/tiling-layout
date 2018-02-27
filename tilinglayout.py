@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QGridLayout
+from PyQt5.QtWidgets import QGridLayout, QWidget
 from bisect import bisect
 import itertools
 import pdb
@@ -144,14 +144,14 @@ class QTilingLayout(QGridLayout):
                 self._adjust_sizes(transpose)
             # self._adjust_sizes2(supporters, transpose)
 
-    def _get_support_widgets(self, widget, before, transpose, level=None):
+    def _get_support_widgets(self, block, before, transpose, level=None):
         """Returns a set of "support" widgets for the specified widget.
 
         A support widget is a widget that is (directly or indirectly) "pushed"
         by the specified widget when it grows.
 
         Args:
-            widget: The widget for which to find supporters.
+            block: The widget (or position) for which to find supporters.
             before: The direction in which to find supporters (True for up,
                     False for down).
             transpose: If True, will behave as if the grid was transposed.
@@ -160,7 +160,8 @@ class QTilingLayout(QGridLayout):
                    for support widgets until the end of the grid.
         """
         supporters = set()
-        pos = self._get_item_position(widget, transpose)
+        pos = self._get_item_position(block, transpose) \
+              if isinstance(block, QWidget) else block
         pivot = pos[0] - 1 if before else pos[0] + pos[2]
         start = pos[1]
         end = pos[1] + pos[3]
@@ -183,8 +184,13 @@ class QTilingLayout(QGridLayout):
     def _adjust_sizes2(self, support_widgets, transpose):
         empty_block = self._find_empty_block(transpose)
         if empty_block:
-            self._fill_empty_block(empty_block, support_widgets, transpose)
-            self._adjust_sizes2(support_widgets, transpose)
+            critical_block = self._find_critical_block(empty_block,
+                                                       support_widgets,
+                                                       transpose)
+            grown_widgets = self._grow_block(critical_block, empty_block[2],
+                                             transpose)
+            self._adjust_sizes2(support_widgets.union(grown_widgets),
+                                transpose)
 
     def _find_empty_block(self, transpose):
         """Finds a block made entirely of empty space.
@@ -215,7 +221,8 @@ class QTilingLayout(QGridLayout):
             rowspan = colspan = 1
             for i in range(empty_block_start[0] + 1,
                            self._row_count(transpose)):
-                if not self._item_at_position(i, empty_block_start[1]):
+                if not self._item_at_position(i, empty_block_start[1],
+                                              transpose):
                     rowspan += 1
                 else:
                     break
@@ -231,8 +238,12 @@ class QTilingLayout(QGridLayout):
             # No empty blocks
             return None
 
-    def _fill_empty_block(self, empty_block, excluded_widgets, transpose):
+    def _find_critical_block(self, empty_block, excluded_widgets, transpose):
         """Finds a critical block to grow and fill the empty space.
+
+        A critical block is a group of one or more widgets that form a
+        rectangle that can be grown as a whole, with each widget growing in the
+        same proportion.
 
         Args:
             empty_block: The position of the empty block in the form
@@ -241,75 +252,139 @@ class QTilingLayout(QGridLayout):
             excluded_widgets: Set of widgets which can't grow so they must
                               not be considered for filling empty spaces.
         """
-        base_widget = self._item_at_position(empty_block[0] - 1,
+        # Move up on each side until one of the ends hits either the end of the
+        # grid or a support widget. The side with the shortest distance is our
+        # pivot, and we can grow the other end horizontally until we can reach
+        # the same distance vertically.
+        bottom_left = self._item_at_position(empty_block[0] - 1,
                                              empty_block[1],
                                              transpose).widget()
-        base_widget_pos = self._get_item_position(base_widget)
-        is_aligned = base_widget_pos[1] == empty_block[1]
-        if is_aligned:
-            increment = True
-            start = base_widget_pos[1]
-            end = base_widget_pos[1] + base_widget_pos[3] - 1
-        else:
-            # This widget isn't aligned with the empty block, so we start
-            # on the other end
-            increment = False
-            base_widget = self._item_at_position(
-                empty_block[0] - 1,
-                empty_block[1] + empty_block[3] - 1,
-                transpose
-            ).widget()
-            base_widget_pos = self._get_item_position(base_widget)
-            start = base_widget_pos[1] + base_widget_pos[3] - 1
-            end = base_widget_pos[1]
+        bottom_left_pos = self._get_item_position(bottom_left, transpose)
+        left_height = self._get_edge_height(bottom_left, True, transpose)
+        top_left = self._item_at_position(
+            bottom_left_pos[0] + bottom_left_pos[2] - left_height - 1,
+            bottom_left_pos[1],
+            transpose
+        )
+        top_left = top_left and top_left.widget()
 
-        # Now to find out the height
-        size = base_widget_pos[2]
-        next_item = self.itemAtPosition(empty_block[0] - 1 - size, start)
-        while next_item and next_item.widget() not in excluded_widgets:
-            pos = self._get_item_position(next_item.widget(), transpose)
-            size += pos[2]
-            next_item = self.itemAtPosition(empty_block[0] - 1 - size, start)
+        bottom_right = self._item_at_position(
+            empty_block[0] - 1,
+            empty_block[1] + empty_block[3] - 1,
+            transpose
+        ).widget()
+        bottom_right_pos = self._get_item_position(bottom_right, transpose)
+        right_height = self._get_edge_height(bottom_right, False, transpose)
+        top_right = self._item_at_position(
+            bottom_right_pos[0] + bottom_right_pos[2] - right_height - 1,
+            bottom_right_pos[1] + bottom_right_pos[3] - 1,
+            transpose
+        )
+        top_right = top_right and top_right.widget()
 
-        # Finally, move along the X axis (going right if increment==True, left
-        # otherwise) and grow the block until it's rectangular
         is_rectangular = False
-        index_limit = empty_block[0] - 1 - size
+        if not top_left and not top_right:
+            # We reached the end of the grid on both sides, so we already have
+            # our critical block
+            is_rectangular = grow_right = True
+        elif not top_left and top_right in excluded_widgets:
+            grow_right = False
+        elif not top_left and top_right not in excluded_widgets:
+            grow_right = True
+        elif not top_right and top_left in excluded_widgets:
+            grow_right = True
+        elif not top_right and top_left not in excluded_widgets:
+            grow_right = False
+        elif top_left not in excluded_widgets:
+            grow_right = False
+        elif top_right not in excluded_widgets:
+            grow_right = True
+        elif left_height == right_height:
+            # Both sides hit the same support widget
+            is_rectangular = grow_right = True
+        else:
+            # Both sides hit different support widgets, the shortest side is
+            # the pivot
+            grow_right = left_height < right_height
+
+        height = left_height if grow_right else right_height
+        if not is_rectangular and grow_right:
+            start = bottom_left_pos[1]
+            end = bottom_left_pos[1] + bottom_left_pos[3] - 1
+        elif not is_rectangular and not grow_right:
+            start = bottom_right_pos[1] + bottom_right_pos[3] - 1
+            end = bottom_right_pos[1]
+        else:
+            start = bottom_left_pos[1]
+            end = bottom_right_pos[1] + bottom_right_pos[3] - 1
+
+        # Finally, move along the X axis (going right if grow_right==True, left
+        # otherwise) and grow the block until it's rectangular
         while not is_rectangular:
-            index = empty_block[0] - 1
-            aligned = True
-            prev_widget = None
-            while aligned and index > index_limit:
-                widget = self._item_at_position(index, end, transpose).widget()
-
-                if widget is prev_widget:
-                    continue
-                prev_widget - widget
-
-                widget_pos = self._get_item_position(widget, transpose)
-                edge = (widget_pos[1] if increment
-                        else widget_pos[1] + widget_pos[3] - 1)
-                aligned = end == edge
-                index -= widget_pos[2]
-
-            if aligned:
+            neighbor = self._item_at_position(empty_block[0] - 1, end,
+                                              transpose).widget()
+            neighbor_height = self._get_edge_height(neighbor, not grow_right,
+                                                    transpose)
+            if neighbor_height >= height:
                 is_rectangular = True
-            next_neighbor = self.item_at_position(
-                empty_block[0] - 1,
-                end + (1 if increment else -1),
-                transpose).widget()
-            next_neighbor_pos = self._get_item_position(next_neighbor,
-                                                        transpose)
-            end += (1 if increment else -1) * next_neighbor_pos[3]
-
-        i, j, rowspan, colspan = (
-            empty_block[0] - size,
+            else:
+                neighbor_pos = self._get_item_position(neighbor, transpose)
+                end += (1 if grow_right else -1) * neighbor_pos[3]
+        return (
+            empty_block[0] - height,
             min(start, end),
-            size,
+            height,
             abs(end - start) + 1
         )
-        # self._grow_block((i, j, rowspan, colspan), empty_block[2])
-        return i, j, rowspan, colspan
+
+    def _get_edge_height(self, widget, left, transpose):
+        """Calculates the height of a widget's "edge".
+
+        Given a widget and a side (left==True or left==False), this function
+        returns the widget's height plus the height of all consecutive widgets
+        on top of it as long as they are aligned (on the proper side) with it.
+        It can be thought as following the line on the specified side of the
+        widget upwards until it reaches either the end of the grid or another
+        widget in the middle.
+        """
+        pos = self._get_item_position(widget, transpose)
+        height = pos[2]
+        floor = pos[0] + pos[2] - 1
+        reached_top = False
+        while not reached_top:
+            up_item = self._item_at_position(
+                floor - height,
+                pos[1] + (0 if left else pos[3] - 1),
+                False
+            )
+            if not up_item:
+                reached_top = True
+            else:
+                up_item_pos = self._get_item_position(up_item.widget(),
+                                                      transpose)
+                reached_top = not (
+                    (up_item_pos[1] == pos[1]) if left
+                    else (up_item_pos[1] + up_item_pos[3] == pos[1] + pos[3])
+                )
+                if not reached_top:
+                    height += up_item_pos[2]
+        return height
+
+    def _grow_block(block, space, transpose):
+        pass
+
+    def _multiply_spans(self, factor, transpose, widgets=None):
+        item = self.itemAt(0)
+        widgets = []
+        while item:
+            pos = self._get_item_position(item.widget(), transpose)
+            pos = (pos[0] * factor, pos[1], pos[2] * factor, pos[3])
+            widgets.append((item.widget(), pos))
+            self.removeWidget(item.widget())
+            item = self.itemAt(0)
+
+        for widget, pos in widgets:
+            self.layout()._add_widget(widget, *pos, transpose)
 
     def _adjust_sizes(self, transpose):
         """Resizes all widgets that have available space to grow.
@@ -386,16 +461,3 @@ class QTilingLayout(QGridLayout):
                           curr_pos[3])
         self.removeWidget(widget)
         self._add_widget(widget, *new_widget_pos, transpose)
-
-    def _multiply_spans(self, factor, transpose):
-        item = self.itemAt(0)
-        widgets = []
-        while item:
-            pos = self._get_item_position(item.widget(), transpose)
-            pos = (pos[0] * factor, pos[1], pos[2] * factor, pos[3])
-            widgets.append((item.widget(), pos))
-            self.removeWidget(item.widget())
-            item = self.itemAt(0)
-
-        for widget, pos in widgets:
-            self.layout()._add_widget(widget, *pos, transpose)
