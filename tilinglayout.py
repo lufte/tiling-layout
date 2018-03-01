@@ -1,7 +1,20 @@
 from PyQt5.QtWidgets import QGridLayout, QWidget
 from bisect import bisect
+from functools import reduce
+from math import gcd as gcd_
 import itertools
 import pdb
+
+
+def gcd(*numbers):
+    """Return the greatest common divisor of the given integers"""
+    return reduce(gcd_, numbers)
+
+
+def lcm(*numbers):
+    """Return lowest common multiple."""
+    return reduce(lambda a, b: (a * b) // gcd_(a, b), numbers, 1)
+
 
 class QTilingLayout(QGridLayout):
 
@@ -141,8 +154,8 @@ class QTilingLayout(QGridLayout):
             adjust = True
             # pdb.set_trace()
             if adjust:
-                self._adjust_sizes(transpose)
-            # self._adjust_sizes2(supporters, transpose)
+                #self._adjust_sizes(transpose)
+                self._adjust_sizes2(supporters, transpose)
 
     def _get_support_widgets(self, block, before, transpose, level=None):
         """Returns a set of "support" widgets for the specified widget.
@@ -187,10 +200,60 @@ class QTilingLayout(QGridLayout):
             critical_block = self._find_critical_block(empty_block,
                                                        support_widgets,
                                                        transpose)
-            grown_widgets = self._grow_block(critical_block, empty_block[2],
-                                             transpose)
-            self._adjust_sizes2(support_widgets.union(grown_widgets),
+            widgets_in_block = self._get_widgets_in_block(*critical_block,
+                                                         transpose)
+
+            height = critical_block[2]
+            new_height = height + empty_block[2]
+            denom = height // gcd(height, new_height)
+            non_divisible_spans = set(
+                self._get_item_position(w, transpose)[2]
+                for w in widgets_in_block
+                if self._get_item_position(w, transpose)[2] % denom != 0
+            )
+
+            if non_divisible_spans:
+                factor = lcm(denom, *non_divisible_spans)
+                self._multiply_spans(factor, transpose)
+                height *= factor
+                new_height *= factor
+                critical_block = (
+                    critical_block[0] * factor,
+                    critical_block[1],
+                    critical_block[2] * factor,
+                    critical_block[3]
+                )
+                empty_block = (
+                    empty_block[0] * factor,
+                    empty_block[1],
+                    empty_block[2] * factor,
+                    empty_block[3]
+                )
+
+            supporters = self._get_support_widgets(critical_block, False,
+                                                   transpose)
+            supporters_cache = []
+            for supporter in supporters:
+                pos = self._get_item_position(supporter, transpose)
+                pos = (pos[0] + empty_block[2], pos[1], pos[2], pos[3])
+                supporters_cache.append((supporter, pos))
+                self.removeWidget(supporter)
+            for supporter, pos in supporters_cache:
+                self._add_widget(supporter, *pos, transpose)
+
+            self._multiply_spans(new_height / height, transpose,
+                                 widgets_in_block)
+            self._adjust_sizes2(support_widgets.union(widgets_in_block),
                                 transpose)
+
+    def _get_widgets_in_block(self, row, col, rowspan, colspan, transpose):
+        widgets = set()
+        for i in range(row, row + rowspan):
+            for j in range(col, col + colspan):
+                item = self._item_at_position(i, j, transpose)
+                if item:
+                    widgets.add(item.widget())
+        return widgets
 
     def _find_empty_block(self, transpose):
         """Finds a block made entirely of empty space.
@@ -355,7 +418,7 @@ class QTilingLayout(QGridLayout):
             up_item = self._item_at_position(
                 floor - height,
                 pos[1] + (0 if left else pos[3] - 1),
-                False
+                transpose
             )
             if not up_item:
                 reached_top = True
@@ -374,16 +437,39 @@ class QTilingLayout(QGridLayout):
         pass
 
     def _multiply_spans(self, factor, transpose, widgets=None):
-        item = self.itemAt(0)
-        widgets = []
-        while item:
-            pos = self._get_item_position(item.widget(), transpose)
-            pos = (pos[0] * factor, pos[1], pos[2] * factor, pos[3])
-            widgets.append((item.widget(), pos))
-            self.removeWidget(item.widget())
-            item = self.itemAt(0)
+        """Multiplies the rowspan of widgets by a specified factor.
 
-        for widget, pos in widgets:
+        Multiplies the rowspan of all widgets (if widgets is None, otherwise
+        only specified widgets) by a specified factor. Their position is also
+        adjusted to match their new height. If a widget is not included in
+        "widgets" but their position could be affected by the change of another
+        widget's rowspan, it must be solved before invoking this function.
+
+        Args:
+            factor: Factor by which to multiply all rowspans.
+            transpose: If True, will behave as if the grid was transposed.
+            widgets: List of widgets whose rowspan to multiply. If omitted, all
+                     widgets are affected.
+        """
+        if widgets is None:
+            widgets = [self.itemAt(i).widget() for i in range(self.count())]
+            offset = 0
+        else:
+            # If not every widget is to be resized, we assume the rest of the
+            # widgets form a critical block. We need to know at which row the
+            # block is positioned and take this offset into account when
+            # setting the new positions of the resized widgets.
+            offset = min((self._get_item_position(w, transpose)[0]
+                          for w in widgets))
+        cache = []
+        for widget in widgets:
+            pos = self._get_item_position(widget, transpose)
+            pos = ((pos[0] - offset) * factor + offset, pos[1],
+                   pos[2] * factor, pos[3])
+            cache.append((widget, pos))
+            self.removeWidget(widget)
+
+        for widget, pos in cache:
             self.layout()._add_widget(widget, *pos, transpose)
 
     def _adjust_sizes(self, transpose):
