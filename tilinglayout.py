@@ -230,10 +230,13 @@ class QTilingLayout(QGridLayout):
                     empty_block[3]
                 )
 
-            supporters = self._get_support_widgets(critical_block, False,
-                                                   transpose)
+            critical_block_bottom_supporters = self._get_support_widgets(
+                critical_block,
+                False,
+                transpose
+            )
             supporters_cache = []
-            for supporter in supporters:
+            for supporter in critical_block_bottom_supporters:
                 pos = self._get_item_position(supporter, transpose)
                 pos = (pos[0] + empty_block[2], pos[1], pos[2], pos[3])
                 supporters_cache.append((supporter, pos))
@@ -241,10 +244,19 @@ class QTilingLayout(QGridLayout):
             for supporter, pos in supporters_cache:
                 self._add_widget(supporter, *pos, transpose)
 
+            critical_block_top_supporters = self._get_support_widgets(
+                critical_block,
+                True,
+                transpose
+            )
             self._multiply_spans(new_height / height, transpose,
                                  widgets_in_block)
-            self._adjust_sizes2(support_widgets.union(widgets_in_block),
-                                transpose)
+            new_supporters = support_widgets.union(
+                widgets_in_block,
+                critical_block_bottom_supporters,
+                critical_block_top_supporters
+            )
+            self._adjust_sizes2(new_supporters, transpose)
 
     def _get_widgets_in_block(self, row, col, rowspan, colspan, transpose):
         widgets = set()
