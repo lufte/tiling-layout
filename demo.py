@@ -13,8 +13,8 @@ from PyQt5.QtWidgets import (QApplication, QCheckBox, QDialog,
 class CentralWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        mainLayout = QTilingLayout()
-        mainLayout.addWidget(Pane(self), 0, 0, 1, 1)
+        mainLayout = QTilingLayout(Pane(self))
+        # mainLayout.addWidget(Pane(self), 0, 0, 1, 1)
         self.setLayout(mainLayout)
 
     def hsplit(self, pane):
@@ -28,7 +28,7 @@ class Pane(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        fileNameLabel = QLabel(str(id(self)))
+        fileNameLabel = QLabel('')
         mainLayout = QVBoxLayout()
         mainLayout.addWidget(fileNameLabel)
         self.setObjectName('pane')
