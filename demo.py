@@ -15,11 +15,6 @@ class CentralWidget(QWidget):
         super().__init__(parent)
         mainLayout = QTilingLayout()
         mainLayout.addWidget(Pane(self), 0, 0, 1, 1)
-        # pos = [(0, 3, 3, 1), (1, 2, 2, 1), (1, 0, 1, 2), (0, 0, 1, 3), (3, 1, 1, 1), (3, 0, 1, 1), (2, 0, 1, 2)]
-        # pos = [(0, 3, 3, 1), (1, 0, 1, 2), (0, 0, 1, 3), (3, 1, 1, 1), (3, 0, 1, 1), (2, 0, 1, 2), (0, 2, 3, 1)]
-        # pos = [(3, 0, 3, 2), (9, 1, 3, 1), (9, 0, 3, 1), (6, 0, 3, 2), (0, 3, 12, 1), (0, 2, 12, 1), (0, 0, 4, 3)]
-        # for p in pos:
-        #   mainLayout.addWidget(Pane(self), *p)
         self.setLayout(mainLayout)
 
     def hsplit(self, pane):

@@ -693,5 +693,46 @@ class CriticalBlockTestCase11(unittest.TestCase):
         )
 
 
+class CriticalBlockTestCase12(unittest.TestCase):
+
+    #  ┌───────────┬───────────┬───────────┬───────────┐
+    #  │     0     │     1     │     2     │     3     │
+    #  ├───────────┴───┬───────┴───────┬───┴───────────┤
+    #  │       4       │               │       6       │
+    #  ├───────────────┤       5       ├───────────────┤
+    #  │       7       │               │░░░░░░░░░░░░░░░│
+    #  ├───────────────┴───────┬───────┴───────────────┤
+    #  │           8           │           9           │
+    #  └───────────────────────┴───────────────────────┘
+    def setUp(self):
+        self.app = QApplication([])
+        self.layout = QTilingLayout()
+        self.widgets = [QWidget() for _ in range(11)]
+        self.layout.addWidget(self.widgets[0], 0, 0, 1, 3)
+        self.layout.addWidget(self.widgets[1], 0, 3, 1, 3)
+        self.layout.addWidget(self.widgets[2], 0, 6, 1, 3)
+        self.layout.addWidget(self.widgets[3], 0, 9, 1, 3)
+        self.layout.addWidget(self.widgets[4], 1, 0, 1, 4)
+        self.layout.addWidget(self.widgets[5], 1, 4, 2, 4)
+        self.layout.addWidget(self.widgets[6], 1, 8, 1, 4)
+        self.layout.addWidget(self.widgets[7], 2, 0, 1, 4)
+        self.layout.addWidget(self.widgets[8], 3, 0, 1, 6)
+        self.layout.addWidget(self.widgets[9], 3, 6, 1, 6)
+
+    def test_find_empty_block(self):
+        self.assertEqual(self.layout._find_empty_block(False),
+                         (2, 8, 1, 4))
+
+    def test_find_critical_block(self):
+        self.assertEqual(
+            self.layout._find_critical_block(
+                (2, 8, 1, 4),
+                self.layout._get_support_widgets(self.widgets[7], True, False),
+                False
+            ),
+            (1, 8, 1, 4)
+        )
+
+
 if __name__ == '__main__':
     unittest.main()
