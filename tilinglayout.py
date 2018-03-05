@@ -92,6 +92,23 @@ class QTilingLayout(QGridLayout):
     def vsplit(self, old_widget, new_widget, put_before=False):
         self._split(old_widget, new_widget, False, put_before=put_before)
 
+    def _tmux_split(self, old_widget, new_widget, horizontal,
+                    put_before=False):
+        transpose = not horizontal
+        curr_pos = self._get_item_position(old_widget, transpose)
+        span = curr_pos[2]
+        if span % 2 != 0:
+            self._multiply_spans(2, transpose)
+            curr_pos = self._get_item_position(old_widget, transpose)
+            span = curr_pos[2]
+        self.removeWidget(old_widget)
+        old_widget_pos = (curr_pos[0], curr_pos[1], curr_pos[2] / 2,
+                          curr_pos[3])
+        new_widget_pos = (curr_pos[0] + (span / 2 ), curr_pos[1],
+                          curr_pos[2] / 2, curr_pos[3])
+        self._add_widget(old_widget, *old_widget_pos, transpose)
+        self._add_widget(new_widget, *new_widget_pos, transpose)
+
     def _split(self, old_widget, new_widget, horizontal, put_before=False):
         """Splits old_widget and inserts new_widget in the available space.
 
