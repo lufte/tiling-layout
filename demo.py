@@ -14,7 +14,7 @@ class CentralWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         mainLayout = QTilingLayout()
-        mainLayout.addWidget(Pane(self), 0, 0, 1, 1)
+        #mainLayout.addWidget(Pane(self), 0, 0, 1, 1)
         self.setLayout(mainLayout)
 
     def hsplit(self, pane):
