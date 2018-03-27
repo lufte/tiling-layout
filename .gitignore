@@ -121,3 +121,6 @@ tags
 
 # Screenshots for testcases
 Screenshot*.png
+
+*.ods
+*.ods#
