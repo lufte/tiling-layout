@@ -99,3 +99,78 @@ class QTilingLayout(QGridLayout):
         self._split(old_widget, new_widget, put_before, True)
 
     def _split(self, old_widget, new_widget, put_before, transpose):
+        # 1- Get the independent block of the splitted widget
+        # 2- Get the longest support line(s) of the independent block
+        # 3- Is the splitted widget in one of those lines?
+        # 3.1 - If so, we must take the whole line out and place all the
+        #       widgets one at a time using a new calculated height and
+        #       remainder. Other widgets in the independent block must be
+        #       shrinked or grown.
+        # 3.2 - If not, we must take the critical block of the widget and
+        #       resize all the widgets in it to make room for the new widget.
+        pass
+
+    def _get_independent_block(self, widget, transpose):
+        pos = self._get_item_position(widget, transpose)
+        expected_height = self._row_count(transpose)
+
+        left = pos[1]
+        found_left_limit = False
+        while not found_left_limit:
+            border_height = self._get_border_height(pos[0], left, transpose)
+            if border_height == expected_height:
+                found_left_limit = True
+            else:
+                left_widget = self._item_at_position(pos[0], left - 1,
+                                                     transpose).widget()
+                left = self._get_item_position(left_widget, transpose)[1]
+
+        right = pos[1] + pos[3]
+        found_right_limit = False
+        while not found_right_limit:
+            border_height = self._get_border_height(pos[0], right, transpose)
+            if border_height == expected_height:
+                found_right_limit = True
+            else:
+                right_widget = self._item_at_position(pos[0], right,
+                                                      transpose).widget()
+                right_widget_pos = self._get_item_position(right_widget,
+                                                           transpose)
+                right = right_widget_pos[1] + right_widget_pos[3]
+
+        return left, right - left
+
+    def _get_border_height(self, row, col, transpose):
+        if col in (0, self._column_count(transpose)):
+            return self._row_count(transpose)
+
+        widget = self._item_at_position(row, col, transpose).widget()
+        pos = self._get_item_position(widget, transpose)
+        assert pos[1] == col
+
+        top, bottom = pos[0], pos[0] + pos[2] - 1
+
+        reached_top = top == 0
+        while not reached_top:
+            tmp_widget = self._item_at_position(top - 1, col,
+                                                transpose).widget()
+            tmp_pos = self._get_item_position(tmp_widget, transpose)
+            if tmp_pos[1] == col:
+                top = tmp_pos[0]
+                reached_top = top == 0
+            else:
+                reached_top = True
+
+        reached_bottom = bottom == self._row_count(transpose) - 1
+        while not reached_bottom:
+            tmp_widget = self._item_at_position(bottom + 1, col,
+                                                transpose).widget()
+            tmp_pos = self._get_item_position(tmp_widget, transpose)
+            if tmp_pos[1] == col:
+                bottom = tmp_pos[0] + tmp_pos[2] - 1
+                reached_bottom = bottom == self._row_count(transpose) - 1
+            else:
+                reached_bottom = True
+
+        return bottom - top + 1
+
