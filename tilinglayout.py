@@ -203,3 +203,11 @@ class QTilingLayout(QGridLayout):
             pdb.set_trace()
         return widget, [self._get_supporters(w, before, transpose)
                         for w in supporters]
+
+    def _get_support_lines(self, tree, ancestors=()):
+        if tree[1]:
+            for supporter in tree[1]:
+                yield from self._get_support_lines(supporter,
+                                                   ancestors + (tree[0],))
+        else:
+            yield ancestors + (tree[0],)

@@ -10,6 +10,26 @@ sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 from tilinglayout import QTilingLayout
 
 
+class Widget(QWidget):
+
+    def __init__(self, name, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.name = name
+
+    def __str__(self):
+        return str(self.name)
+
+    def __repr__(self):
+        return str(self.name)
+
+
+def get_empty_tiling_layout():
+    mock_widget = QWidget()
+    layout = QTilingLayout(mock_widget, max_span=1)
+    layout.removeWidget(mock_widget)
+    return layout
+
+
 class TransposedMethodsTestCase(unittest.TestCase):
 
     #  ┌───┬──────────┐
@@ -21,8 +41,8 @@ class TransposedMethodsTestCase(unittest.TestCase):
     #  └───────┴──────┘
     def setUp(self):
         self.app = QApplication([])
-        self.layout = QTilingLayout()
-        self.widgets = [QWidget() for _ in range(5)]
+        self.widgets = [Widget(i) for i in range(5)]
+        self.layout = get_empty_tiling_layout()
         self.layout.addWidget(self.widgets[0], 0, 0, 2, 1)
         self.layout.addWidget(self.widgets[1], 0, 1, 1, 3)
         self.layout.addWidget(self.widgets[2], 1, 1, 1, 1)
@@ -89,21 +109,19 @@ class BorderHeightTestCase(unittest.TestCase):
     #  └───────────┘
     def setUp(self):
         self.app = QApplication([])
-        mock_widget = QWidget()
-        self.layout = QTilingLayout(mock_widget, max_span=3)
-        self.layout.removeWidget(mock_widget)
-        self.ws = [QWidget() for _ in range(6)]
+        self.layout = get_empty_tiling_layout()
+        self.ws = [Widget(i) for i in range(6)]
         self.layout.addWidget(self.ws[0], 0, 0, 2, 1)
         self.layout.addWidget(self.ws[1], 0, 1, 1, 2)
         self.layout.addWidget(self.ws[2], 1, 1, 1, 1)
         self.layout.addWidget(self.ws[3], 1, 2, 1, 1)
-        self.layout.addWidget(self.ws[4], 2, 0, 1, 2)
+        self.layout.addWidget(self.ws[4], 2, 0, 1, 3)
 
     def test_all_heights(self):
         self.assertEqual(self.layout._get_border_height(0, 0, False), 3)
         self.assertEqual(self.layout._get_border_height(0, 1, False), 2)
         self.assertEqual(self.layout._get_border_height(0, 3, False), 3)
-        self.assertEqual(self.layout._get_border_height(1, 2, False), 2)
+        self.assertEqual(self.layout._get_border_height(1, 2, False), 1)
 
 
 class IndependentBlockTestCase(unittest.TestCase):
@@ -117,10 +135,8 @@ class IndependentBlockTestCase(unittest.TestCase):
     #  └───────────┴───────┴───┘
     def setUp(self):
         self.app = QApplication([])
-        mock_widget = QWidget()
-        self.layout = QTilingLayout(mock_widget, max_span=1)
-        self.layout.removeWidget(mock_widget)
-        self.ws = [QWidget() for _ in range(12)]
+        self.layout = get_empty_tiling_layout()
+        self.ws = [Widget(i) for i in range(12)]
         self.layout.addWidget(self.ws[0], 0, 0, 2, 1)
         self.layout.addWidget(self.ws[1], 0, 1, 1, 2)
         self.layout.addWidget(self.ws[2], 0, 3, 1, 2)
@@ -174,10 +190,8 @@ class SupportersTestCase(unittest.TestCase):
     #  └───────────┘
     def setUp(self):
         self.app = QApplication([])
-        mock_widget = QWidget()
-        self.layout = QTilingLayout(mock_widget, max_span=1)
-        self.layout.removeWidget(mock_widget)
-        self.ws = [QWidget() for _ in range(8)]
+        self.layout = get_empty_tiling_layout()
+        self.ws = [Widget(i) for i in range(8)]
         self.layout.addWidget(self.ws[0], 0, 0, 1, 3)
         self.layout.addWidget(self.ws[1], 1, 0, 3, 1)
         self.layout.addWidget(self.ws[2], 1, 1, 1, 2)
@@ -217,6 +231,18 @@ class SupportersTestCase(unittest.TestCase):
                     ]),
                 ]
             )
+        )
+
+    def test_support_lines(self):
+        self.assertEqual(
+            set(self.layout._get_support_lines(
+                self.layout._get_supporters(self.ws[0], False, False)
+            )),
+            {
+                (self.ws[0], self.ws[2], self.ws[4], self.ws[5], self.ws[6]),
+                (self.ws[0], self.ws[2], self.ws[3], self.ws[6]),
+                (self.ws[0], self.ws[1], self.ws[6])
+            }
         )
 
 
