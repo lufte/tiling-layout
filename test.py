@@ -92,7 +92,7 @@ class BorderHeightTestCase(unittest.TestCase):
         mock_widget = QWidget()
         self.layout = QTilingLayout(mock_widget, max_span=3)
         self.layout.removeWidget(mock_widget)
-        self.ws = [QWidget() for _ in range(7)]
+        self.ws = [QWidget() for _ in range(6)]
         self.layout.addWidget(self.ws[0], 0, 0, 2, 1)
         self.layout.addWidget(self.ws[1], 0, 1, 1, 2)
         self.layout.addWidget(self.ws[2], 1, 1, 1, 1)
@@ -157,6 +157,67 @@ class IndependentBlockTestCase(unittest.TestCase):
         self.assertEqual(self.layout._get_independent_block(self.ws[10],
                                                             False),
                          (5, 1))
+
+
+class SupportersTestCase(unittest.TestCase):
+
+    #  ┌───────────┐
+    #  │     0     │
+    #  ├───┬───────┤
+    #  │   │   2   │
+    #  │   ├───┬───┤
+    #  │ 1 │   │ 4 │
+    #  │   │ 3 ├───┤
+    #  │   │   │ 5 │
+    #  ├───┴───┴───┤
+    #  │     6     │
+    #  └───────────┘
+    def setUp(self):
+        self.app = QApplication([])
+        mock_widget = QWidget()
+        self.layout = QTilingLayout(mock_widget, max_span=1)
+        self.layout.removeWidget(mock_widget)
+        self.ws = [QWidget() for _ in range(8)]
+        self.layout.addWidget(self.ws[0], 0, 0, 1, 3)
+        self.layout.addWidget(self.ws[1], 1, 0, 3, 1)
+        self.layout.addWidget(self.ws[2], 1, 1, 1, 2)
+        self.layout.addWidget(self.ws[3], 2, 1, 2, 1)
+        self.layout.addWidget(self.ws[4], 2, 2, 1, 1)
+        self.layout.addWidget(self.ws[5], 3, 2, 1, 1)
+        self.layout.addWidget(self.ws[6], 4, 0, 1, 3)
+
+    def test_down_supporters(self):
+        self.assertEqual(
+            self.layout._get_supporters(self.ws[0], False, False),
+            (
+                self.ws[0],
+                [
+                    (self.ws[1], [(self.ws[6], [])]),
+                    (
+                        self.ws[2],
+                        [
+                            (self.ws[3], [(self.ws[6], [])]),
+                            (self.ws[4], [(self.ws[5], [(self.ws[6], [])])])
+                        ]
+                    )
+                ]
+            )
+        )
+
+    def test_up_supporters(self):
+        self.assertEqual(
+            self.layout._get_supporters(self.ws[6], True, False),
+            (
+                self.ws[6],
+                [
+                    (self.ws[1], [(self.ws[0], [])]),
+                    (self.ws[3], [(self.ws[2], [(self.ws[0], [])])]),
+                    (self.ws[5], [
+                        (self.ws[4], [(self.ws[2], [(self.ws[0], [])])])
+                    ]),
+                ]
+            )
+        )
 
 
 if __name__ == '__main__':

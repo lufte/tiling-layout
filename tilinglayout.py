@@ -174,3 +174,32 @@ class QTilingLayout(QGridLayout):
 
         return bottom - top + 1
 
+    def _get_supporters(self, widget, before, transpose):
+        """Returns a tree of "support" widgets for the specified widget.
+
+        A support widget is a widget that is (directly or indirectly) "pushed"
+        by the specified widget when it grows.
+
+        Args:
+            block: The widget (or position) for which to find supporters.
+            before: The direction in which to find supporters (True for up,
+                    False for down).
+            transpose: If True, will behave as if the grid was transposed.
+        """
+        supporters = []
+        pos = self._get_item_position(widget, transpose)
+        pivot = pos[0] - 1 if before else pos[0] + pos[2]
+        col = pos[1]
+        upper_limit = self._row_count(transpose)
+        within_limits = (pivot >= 0) if before else (pivot < upper_limit)
+        if within_limits:
+            while col < pos[1] + pos[3]:
+                supporter = self._item_at_position(pivot, col,
+                                                   transpose).widget()
+                supporters.append(supporter)
+                supporter_pos = self._get_item_position(supporter, transpose)
+                col = supporter_pos[1] + supporter_pos[3]
+        if widget in supporters:
+            pdb.set_trace()
+        return widget, [self._get_supporters(w, before, transpose)
+                        for w in supporters]
