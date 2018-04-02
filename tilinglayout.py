@@ -199,8 +199,6 @@ class QTilingLayout(QGridLayout):
                 supporters.append(supporter)
                 supporter_pos = self._get_item_position(supporter, transpose)
                 col = supporter_pos[1] + supporter_pos[3]
-        if widget in supporters:
-            pdb.set_trace()
         return widget, [self._get_supporters(w, before, transpose)
                         for w in supporters]
 
