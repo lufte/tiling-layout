@@ -13,8 +13,7 @@ from PyQt5.QtWidgets import (QApplication, QCheckBox, QDialog,
 class CentralWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        mainLayout = QTilingLayout()
-        #mainLayout.addWidget(Pane(self), 0, 0, 1, 1)
+        mainLayout = QTilingLayout(Pane(self), max_span=9)
         self.setLayout(mainLayout)
 
     def hsplit(self, pane):

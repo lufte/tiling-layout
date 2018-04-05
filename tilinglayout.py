@@ -108,7 +108,71 @@ class QTilingLayout(QGridLayout):
         #       shrinked or grown.
         # 3.2 - If not, we must take the critical block of the widget and
         #       resize all the widgets in it to make room for the new widget.
-        pass
+        ib = self._get_independent_block(old_widget, transpose)
+        index = ib[0]
+        top_widgets = []
+        while index < sum(ib):
+           w = self._item_at_position(0, index, transpose).widget()
+           top_widgets.append(w)
+           index += self._get_item_position(w, transpose)[2]
+
+        support_lines = list(itertools.chain(*(
+            self._get_support_lines(self._get_supporters(widget, False,
+                                                              transpose))
+            for widget in top_widgets
+        )))
+        max_height = max(len(line) for line in support_lines)
+        longest_support_lines = [line for line in support_lines
+                                 if len(line) == max_height]
+        splitting_longest_support_line = any(old_widget in line for line
+                                             in longest_support_lines)
+
+        if splitting_longest_support_line:
+            done = set()
+            new_height = self._row_count(transpose) // (max_height + 1)
+
+            if new_height < 1:
+                raise SplitLimitException()
+
+            rem = self._row_count(transpose) % (max_height + 1)
+            modspans = [(0, rem)] * self._column_count(transpose)
+            widgets = (widget
+                       for line in longest_support_lines
+                       for widget in line)
+            for widget in widgets:
+                if widget in done:
+                    continue
+
+                old_pos = self._get_item_position(widget, transpose)
+                self.removeWidget(widget)
+                if widget is old_widget:
+                    widget1, widget2 = ((new_widget, old_widget) if put_before
+                                        else (old_widget, new_widget))
+                    modspans = self._append_widget(widget1, modspans,
+                                                   old_pos, new_height,
+                                                   transpose)
+                    modspans = self._append_widget(widget2, modspans,
+                                                   old_pos, new_height,
+                                                   transpose)
+                else:
+                    modspans = self._append_widget(widget, modspans,
+                                                   old_pos, new_height,
+                                                   transpose)
+                done.add(widget)
+        else:
+            raise NotImplementedError
+
+    def _append_widget(self, widget, modspans, old_pos, new_height, transpose):
+        curr_row, curr_rem = modspans[old_pos[1]]
+        height = new_height + (1 if curr_rem else 0)
+        self._add_widget(widget, curr_row, old_pos[1], height, old_pos[3],
+                         transpose)
+
+        updated_modspans = list(modspans)
+        for col in range(old_pos[1], old_pos[1] + old_pos[3]):
+            updated_modspans[col] = (curr_row + height, max(0, curr_rem - 1))
+
+        return updated_modspans
 
     def _get_independent_block(self, widget, transpose):
         pos = self._get_item_position(widget, transpose)
@@ -202,10 +266,10 @@ class QTilingLayout(QGridLayout):
         return widget, [self._get_supporters(w, before, transpose)
                         for w in supporters]
 
-    def _get_support_lines(self, tree, ancestors=()):
+    def _get_support_lines(self, tree, ancestors=[]):
         if tree[1]:
             for supporter in tree[1]:
                 yield from self._get_support_lines(supporter,
-                                                   ancestors + (tree[0],))
+                                                   ancestors + [tree[0]])
         else:
-            yield ancestors + (tree[0],)
+            yield ancestors + [tree[0]]

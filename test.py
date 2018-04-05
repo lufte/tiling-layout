@@ -235,7 +235,7 @@ class SupportersTestCase(unittest.TestCase):
 
     def test_support_lines(self):
         self.assertEqual(
-            set(self.layout._get_support_lines(
+            set(tuple(line) for line in self.layout._get_support_lines(
                 self.layout._get_supporters(self.ws[0], False, False)
             )),
             {
