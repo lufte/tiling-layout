@@ -1,5 +1,4 @@
 from PyQt5.QtWidgets import QGridLayout, QWidget
-from bisect import bisect
 from functools import reduce
 from math import gcd as gcd_
 import itertools
@@ -108,6 +107,7 @@ class QTilingLayout(QGridLayout):
         #       shrinked or grown.
         # 3.2 - If not, we must take the critical block of the widget and
         #       resize all the widgets in it to make room for the new widget.
+        old_widget_pos = self._get_item_position(old_widget, transpose)
         ib = self._get_independent_block(old_widget, transpose)
         index = ib[0]
         top_widgets = []
@@ -116,19 +116,15 @@ class QTilingLayout(QGridLayout):
            top_widgets.append(w)
            index += self._get_item_position(w, transpose)[2]
 
-        support_lines = list(itertools.chain(*(
-            self._get_support_lines(self._get_supporters(widget, False,
-                                                              transpose))
-            for widget in top_widgets
-        )))
-        max_height = max(len(line) for line in support_lines)
-        longest_support_lines = [line for line in support_lines
-                                 if len(line) == max_height]
-        splitting_longest_support_line = any(old_widget in line for line
-                                             in longest_support_lines)
+        max_height = max(self._get_supporters(widget, False, transpose).height
+                         for widget in top_widgets)
+        top_supporters = self._get_supporters(old_widget, True, transpose)
+        bottom_supporters = self._get_supporters(old_widget, False, transpose)
+
+        splitting_longest_support_line = (max_height == top_supporters.height +
+                                          bottom_supporters.height - 1)
 
         if splitting_longest_support_line:
-            done = set()
             new_height = self._row_count(transpose) // (max_height + 1)
 
             if new_height < 1:
@@ -136,43 +132,30 @@ class QTilingLayout(QGridLayout):
 
             rem = self._row_count(transpose) % (max_height + 1)
             modspans = [(0, rem)] * self._column_count(transpose)
-            widgets = (widget
-                       for line in longest_support_lines
-                       for widget in line)
-            for widget in widgets:
-                if widget in done:
-                    continue
+            widgets = sorted(
+                ((widget, self._get_item_position(widget, transpose))
+                 for widget in top_supporters.longest_branches_nodes().union(
+                     bottom_supporters.longest_branches_nodes()
+                )),
+                key=lambda w: w[1][0]
+            )
+            if put_before:
+                widgets.insert(widgets.index((old_widget, old_widget_pos)),
+                               (new_widget, old_widget_pos))
+            else:
+                widgets.insert(widgets.index((old_widget, old_widget_pos)) + 1,
+                               (new_widget, old_widget_pos))
 
-                old_pos = self._get_item_position(widget, transpose)
+            for widget, old_pos in widgets:
                 self.removeWidget(widget)
-                if widget is old_widget:
-                    widget1, widget2 = ((new_widget, old_widget) if put_before
-                                        else (old_widget, new_widget))
-                    modspans = self._append_widget(widget1, modspans,
-                                                   old_pos, new_height,
-                                                   transpose)
-                    modspans = self._append_widget(widget2, modspans,
-                                                   old_pos, new_height,
-                                                   transpose)
-                else:
-                    modspans = self._append_widget(widget, modspans,
-                                                   old_pos, new_height,
-                                                   transpose)
-                done.add(widget)
+                curr_row, curr_rem = modspans[old_pos[1]]
+                height = new_height + (1 if curr_rem else 0)
+                self._add_widget(widget, curr_row, old_pos[1], height,
+                                 old_pos[3], transpose)
+                for col in range(old_pos[1], old_pos[1] + old_pos[3]):
+                    modspans[col] = (curr_row + height, max(0, curr_rem - 1))
         else:
             raise NotImplementedError
-
-    def _append_widget(self, widget, modspans, old_pos, new_height, transpose):
-        curr_row, curr_rem = modspans[old_pos[1]]
-        height = new_height + (1 if curr_rem else 0)
-        self._add_widget(widget, curr_row, old_pos[1], height, old_pos[3],
-                         transpose)
-
-        updated_modspans = list(modspans)
-        for col in range(old_pos[1], old_pos[1] + old_pos[3]):
-            updated_modspans[col] = (curr_row + height, max(0, curr_rem - 1))
-
-        return updated_modspans
 
     def _get_independent_block(self, widget, transpose):
         pos = self._get_item_position(widget, transpose)
@@ -263,13 +246,23 @@ class QTilingLayout(QGridLayout):
                 supporters.append(supporter)
                 supporter_pos = self._get_item_position(supporter, transpose)
                 col = supporter_pos[1] + supporter_pos[3]
-        return widget, [self._get_supporters(w, before, transpose)
-                        for w in supporters]
+        return TreeNode(widget, [self._get_supporters(w, before, transpose)
+                                 for w in supporters])
 
-    def _get_support_lines(self, tree, ancestors=[]):
-        if tree[1]:
-            for supporter in tree[1]:
-                yield from self._get_support_lines(supporter,
-                                                   ancestors + [tree[0]])
-        else:
-            yield ancestors + [tree[0]]
+
+class TreeNode:
+
+    def __init__(self, value, children=[]):
+        self.value = value
+        self.children = children
+        self._height = 1 + max((child.height for child in self.children),
+                               default=0)
+
+    @property
+    def height(self):
+        return self._height
+
+    def longest_branches_nodes(self):
+        return {self.value}.union(*(child.longest_branches_nodes()
+                                    for child in self.children
+                                    if child.height == self.height - 1))
