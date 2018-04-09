@@ -5,16 +5,6 @@ import itertools
 import pdb
 
 
-def gcd(*numbers):
-    """Return the greatest common divisor of the given integers"""
-    return reduce(gcd_, numbers)
-
-
-def lcm(*numbers):
-    """Return lowest common multiple."""
-    return reduce(lambda a, b: (a * b) // gcd_(a, b), numbers, 1)
-
-
 class SplitLimitException(Exception):
     pass
 

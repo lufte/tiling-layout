@@ -7,7 +7,32 @@ from unittest.mock import Mock, patch
 from PyQt5.QtWidgets import QWidget, QApplication
 
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
-from tilinglayout import QTilingLayout
+from tilinglayout import QTilingLayout, TreeNode
+
+
+class TreeNodeTestCase(unittest.TestCase):
+
+    def test_one_node_tree(self):
+        tree = TreeNode(0)
+        self.assertEqual(tree.height, 1)
+        self.assertEqual(tree.longest_branches_nodes(), {0})
+
+    def test_taller_tree(self):
+        tree = TreeNode(
+            0,
+            [
+                TreeNode(
+                    1,
+                    [
+                        TreeNode(2),
+                        TreeNode(3)
+                    ]
+                ),
+                TreeNode(4)
+            ]
+        )
+        self.assertEqual(tree.height, 3)
+        self.assertEqual(tree.longest_branches_nodes(), {0, 1, 2, 3})
 
 
 class Widget(QWidget):
@@ -201,49 +226,41 @@ class SupportersTestCase(unittest.TestCase):
         self.layout.addWidget(self.ws[6], 4, 0, 1, 3)
 
     def test_down_supporters(self):
+        supporters = self.layout._get_supporters(self.ws[0], False, False)
+        self.assertEqual(supporters.value, self.ws[0])
+        self.assertEqual(supporters.children[0].value, self.ws[1])
+        self.assertEqual(supporters.children[0].children[0].value, self.ws[6])
+        self.assertEqual(supporters.children[1].value, self.ws[2])
+        self.assertEqual(supporters.children[1].children[0].value, self.ws[3])
+        self.assertEqual(supporters.children[1].children[0].children[0].value,
+                         self.ws[6])
+        self.assertEqual(supporters.children[1].children[1].value, self.ws[4])
+        self.assertEqual(supporters.children[1].children[1].children[0].value,
+                         self.ws[5])
         self.assertEqual(
-            self.layout._get_supporters(self.ws[0], False, False),
-            (
-                self.ws[0],
-                [
-                    (self.ws[1], [(self.ws[6], [])]),
-                    (
-                        self.ws[2],
-                        [
-                            (self.ws[3], [(self.ws[6], [])]),
-                            (self.ws[4], [(self.ws[5], [(self.ws[6], [])])])
-                        ]
-                    )
-                ]
-            )
+            supporters.children[1].children[1].children[0].children[0].value,
+            self.ws[6]
         )
+        self.assertEqual(supporters.children[0].children[0].children, [])
 
     def test_up_supporters(self):
+        supporters = self.layout._get_supporters(self.ws[6], True, False)
+        self.assertEqual(supporters.value, self.ws[6])
+        self.assertEqual(supporters.children[0].value, self.ws[1])
+        self.assertEqual(supporters.children[0].children[0].value, self.ws[0])
+        self.assertEqual(supporters.children[1].value, self.ws[3])
+        self.assertEqual(supporters.children[1].children[0].value, self.ws[2])
+        self.assertEqual(supporters.children[1].children[0].children[0].value,
+                         self.ws[0])
+        self.assertEqual(supporters.children[2].value, self.ws[5])
+        self.assertEqual(supporters.children[2].children[0].value, self.ws[4])
+        self.assertEqual(supporters.children[2].children[0].children[0].value,
+                         self.ws[2])
         self.assertEqual(
-            self.layout._get_supporters(self.ws[6], True, False),
-            (
-                self.ws[6],
-                [
-                    (self.ws[1], [(self.ws[0], [])]),
-                    (self.ws[3], [(self.ws[2], [(self.ws[0], [])])]),
-                    (self.ws[5], [
-                        (self.ws[4], [(self.ws[2], [(self.ws[0], [])])])
-                    ]),
-                ]
-            )
+            supporters.children[2].children[0].children[0].children[0].value,
+            self.ws[0]
         )
-
-    def test_support_lines(self):
-        self.assertEqual(
-            set(tuple(line) for line in self.layout._get_support_lines(
-                self.layout._get_supporters(self.ws[0], False, False)
-            )),
-            {
-                (self.ws[0], self.ws[2], self.ws[4], self.ws[5], self.ws[6]),
-                (self.ws[0], self.ws[2], self.ws[3], self.ws[6]),
-                (self.ws[0], self.ws[1], self.ws[6])
-            }
-        )
+        self.assertEqual(supporters.children[0].children[0].children, [])
 
 
 if __name__ == '__main__':
