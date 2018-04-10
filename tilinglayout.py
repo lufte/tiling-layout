@@ -121,7 +121,7 @@ class QTilingLayout(QGridLayout):
                 raise SplitLimitException()
 
             rem = self._row_count(transpose) % (max_height + 1)
-            modspans = [(0, rem)] * self._column_count(transpose)
+            remspans = [(0, rem)] * self._column_count(transpose)
             widgets = sorted(
                 ((widget, self._get_item_position(widget, transpose))
                  for widget in top_supporters.longest_branches_nodes().union(
@@ -138,12 +138,14 @@ class QTilingLayout(QGridLayout):
 
             for widget, old_pos in widgets:
                 self.removeWidget(widget)
-                curr_row, curr_rem = modspans[old_pos[1]]
+                row, curr_rem = max(
+                    remspans[old_pos[1]:old_pos[1] + old_pos[3]]
+                )
                 height = new_height + (1 if curr_rem else 0)
-                self._add_widget(widget, curr_row, old_pos[1], height,
+                self._add_widget(widget, row, old_pos[1], height,
                                  old_pos[3], transpose)
                 for col in range(old_pos[1], old_pos[1] + old_pos[3]):
-                    modspans[col] = (curr_row + height, max(0, curr_rem - 1))
+                    remspans[col] = (row + height, max(0, curr_rem - 1))
         else:
             raise NotImplementedError
 
