@@ -122,11 +122,14 @@ class QTilingLayout(QGridLayout):
 
             rem = self._row_count(transpose) % (max_height + 1)
             remspans = [(0, rem)] * self._column_count(transpose)
+            longest_branches_widgets = (
+                top_supporters.longest_branches_nodes().union(
+                     bottom_supporters.longest_branches_nodes()
+                )
+            )
             widgets = sorted(
                 ((widget, self._get_item_position(widget, transpose))
-                 for widget in top_supporters.longest_branches_nodes().union(
-                     bottom_supporters.longest_branches_nodes()
-                )),
+                 for widget in longest_branches_widgets),
                 key=lambda w: w[1][0]
             )
             if put_before:
@@ -146,6 +149,26 @@ class QTilingLayout(QGridLayout):
                                  old_pos[3], transpose)
                 for col in range(old_pos[1], old_pos[1] + old_pos[3]):
                     remspans[col] = (row + height, max(0, curr_rem - 1))
+
+            empty_block = self._find_empty_block(transpose)
+            adjusted = longest_branches_widgets.union(new_widget)
+            while empty_block:
+                # Figure out where to start searching our critical block and in
+                # what directions
+                top_item = self._item_at_position(empty_block[0] - 1,
+                                                  empty_block[1],
+                                                  transpose)
+                left_item = self._item_at_position(empty_block[0],
+                                                   empty_block[1] - 1,
+                                                   transpose)
+                up = top_item is None or top_item.widget() not in adjusted
+                left = left_item is None or left_item.widget() not in adjusted
+                i = empty_block[0] + (0 if up else empty_block[2])
+                j = empty_block[1] + (empty_block[3] if left else 0)
+                critical_block = self._find_critical_block(i, j, up, left,
+                                                           transpose)
+                # resize block
+                adjusted = adjusted.union(critical_block)
         else:
             raise NotImplementedError
 
@@ -156,7 +179,10 @@ class QTilingLayout(QGridLayout):
         left = pos[1]
         found_left_limit = False
         while not found_left_limit:
-            border_height = self._get_border_height(pos[0], left, transpose)
+            border_height = (
+                self._get_border_height(pos[0], left, False,  transpose)
+                + self._get_border_height(pos[0], left, True,  transpose)
+            )
             if border_height == expected_height:
                 found_left_limit = True
             else:
@@ -167,7 +193,10 @@ class QTilingLayout(QGridLayout):
         right = pos[1] + pos[3]
         found_right_limit = False
         while not found_right_limit:
-            border_height = self._get_border_height(pos[0], right, transpose)
+            border_height = (
+                self._get_border_height(pos[0], right, False, transpose)
+                + self._get_border_height(pos[0], right, True, transpose)
+            )
             if border_height == expected_height:
                 found_right_limit = True
             else:
@@ -179,39 +208,26 @@ class QTilingLayout(QGridLayout):
 
         return left, right - left
 
-    def _get_border_height(self, row, col, transpose):
+    def _get_border_height(self, row, col, up, transpose):
+        rows = self._row_count(transpose)
         if col in (0, self._column_count(transpose)):
-            return self._row_count(transpose)
+            return row if up else (rows - row)
+        elif row == 0 and up or row == rows and not up:
+            return 0
 
-        widget = self._item_at_position(row, col, transpose).widget()
-        pos = self._get_item_position(widget, transpose)
-        assert pos[1] == col
-
-        top, bottom = pos[0], pos[0] + pos[2] - 1
-
-        reached_top = top == 0
-        while not reached_top:
-            tmp_widget = self._item_at_position(top - 1, col,
-                                                transpose).widget()
-            tmp_pos = self._get_item_position(tmp_widget, transpose)
-            if tmp_pos[1] == col:
-                top = tmp_pos[0]
-                reached_top = top == 0
+        index = row
+        reached_end = False
+        while not reached_end:
+            widget = self._item_at_position(index - 1 if up else index,
+                                            col, transpose).widget()
+            pos = self._get_item_position(widget, transpose)
+            if pos[1] == col:
+                index = pos[0] if up else pos[0] + pos[2]
+                reached_end = index == 0 if up else index == rows
             else:
-                reached_top = True
+                reached_end = True
 
-        reached_bottom = bottom == self._row_count(transpose) - 1
-        while not reached_bottom:
-            tmp_widget = self._item_at_position(bottom + 1, col,
-                                                transpose).widget()
-            tmp_pos = self._get_item_position(tmp_widget, transpose)
-            if tmp_pos[1] == col:
-                bottom = tmp_pos[0] + tmp_pos[2] - 1
-                reached_bottom = bottom == self._row_count(transpose) - 1
-            else:
-                reached_bottom = True
-
-        return bottom - top + 1
+        return row - index if up else index - row
 
     def _get_supporters(self, widget, before, transpose):
         """Returns a tree of "support" widgets for the specified widget.
@@ -240,6 +256,85 @@ class QTilingLayout(QGridLayout):
                 col = supporter_pos[1] + supporter_pos[3]
         return TreeNode(widget, [self._get_supporters(w, before, transpose)
                                  for w in supporters])
+
+    def _find_empty_block(self, transpose):
+        """Finds a block made entirely of empty space.
+
+        Returns a tuple in the form of (i, j, rowspan, colspan). the block is
+        of the largest possible size.
+
+        Args:
+            transpose: If True, will behave as if the grid was transposed.
+        """
+        i = -1
+        found = False
+        while not found and i < self._row_count(transpose):
+            i += 1
+            j = 0
+            while not found and j < self._column_count(transpose):
+                item = self._item_at_position(i, j, transpose)
+                if item is None:
+                    found = True
+                else:
+                    pos = self._get_item_position(item.widget(), transpose)
+                    j += pos[3]
+
+        if not found:
+            return None
+
+        rowspan, colspan = 0, 0
+        reached_end = False
+        while not reached_end:
+            rowspan += 1
+            reached_end = (i + rowspan >= self._row_count(transpose) or
+                           self._item_at_position(i + rowspan, j,
+                                                  transpose) is not None)
+        reached_end = False
+        while not reached_end:
+            colspan += 1
+            reached_end = (j + colspan >= self._column_count(transpose) or
+                           self._item_at_position(i, j + colspan,
+                                                  transpose) is not None)
+
+        return i, j, rowspan, colspan
+
+    def _find_critical_block(self, i, j, up, left, transpose):
+        """Finds a critical block from the specified starting point.
+
+        A critical block is a group of one or more widgets that form a
+        rectangle that can be grown as a whole, with each widget growing in the
+        same proportion.
+        Args:
+            i: Starting row.
+            j: Starting column.
+            up: If True, go up to find new widgets, else go down.
+            left: If True, go left to find new widgets, else go right.
+            transpose: If True, will behave as if the grid was transposed.
+        """
+        first_border = self._get_border_height(i, j, up, transpose)
+        is_rectangular = False
+        pivot = j
+        while not is_rectangular:
+            neighbor = self._item_at_position(i - (1 if up else 0),
+                                              pivot - (1 if left else 0),
+                                              transpose).widget()
+            neighbor_pos = self._get_item_position(neighbor, transpose)
+            neighbor_border = self._get_border_height(
+                i,
+                neighbor_pos[1] + (0 if left else neighbor_pos[3]),
+                up,
+                transpose
+            )
+            if neighbor_border >= first_border:
+                is_rectangular = True
+            pivot += (-1 if left else 1) * neighbor_pos[3]
+
+        i, j, rowspan, colspan = (i - (first_border if up else 0),
+                                  neighbor_pos[1] if left else j,
+                                  first_border,
+                                  abs(pivot - j))
+        # assert self._is_rectangular(i, j, rowspan, colspan)
+        return i, j, rowspan, colspan
 
 
 class TreeNode:
