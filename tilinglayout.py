@@ -333,8 +333,56 @@ class QTilingLayout(QGridLayout):
                                   neighbor_pos[1] if left else j,
                                   first_border,
                                   abs(pivot - j))
-        # assert self._is_rectangular(i, j, rowspan, colspan)
+        assert self._is_rectangular(i, j, rowspan, colspan, transpose)
         return i, j, rowspan, colspan
+
+    def _is_rectangular(self, i, j, rowspan, colspan, transpose):
+        # TODO: refactor to avoid 4 whiles
+        try:
+            # Left edge
+            index = i
+            reached_end = False
+            while not reached_end:
+                widget = self._item_at_position(index, j, transpose).widget()
+                pos = self._get_item_position(widget, transpose)
+                assert pos[1] == j
+                index += pos[2]
+                reached_end = index >= i + rowspan
+
+            # Top edge
+            index = j
+            reached_end = False
+            while not reached_end:
+                widget = self._item_at_position(i, index, transpose).widget()
+                pos = self._get_item_position(widget, transpose)
+                assert pos[0] == i
+                index += pos[3]
+                reached_end = index >= j + colspan
+
+            # Right edge
+            index = i
+            reached_end = False
+            while not reached_end:
+                widget = self._item_at_position(index, j + colspan - 1,
+                                                transpose).widget()
+                pos = self._get_item_position(widget, transpose)
+                assert pos[1] + pos[3] == j + colspan
+                index += pos[2]
+                reached_end = index >= i + rowspan
+
+            # Bottom edge
+            index = j
+            reached_end = False
+            while not reached_end:
+                widget = self._item_at_position(i + rowspan - 1,
+                                                index, transpose).widget()
+                pos = self._get_item_position(widget, transpose)
+                assert pos[0] + pos[2] == i + rowspan
+                index += pos[3]
+                reached_end = index >= j + colspan
+            return True
+        except (AttributeError, AssertionError):
+            return False
 
 
 class TreeNode:

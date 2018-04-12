@@ -590,5 +590,47 @@ class CriticalBlockTestCase(unittest.TestCase):
             (1, 0, 5, 7)
         )
 
+
+class IsRectangularTestCase(unittest.TestCase):
+
+    #  ┌───┬───────┐
+    #  │   │   1   │
+    #  │ 0 ├───┬───┤
+    #  │   │ 2 │ 3 │
+    #  ├───┴───┼───┤
+    #  │   4   │ 5 │
+    #  └───────┴───┘
+    def setUp(self):
+        self.app = QApplication([])
+        self.layout = get_empty_tiling_layout()
+        self.ws = [Widget(i) for i in range(7)]
+        self.layout.addWidget(self.ws[0], 0, 0, 2, 1)
+        self.layout.addWidget(self.ws[1], 0, 1, 1, 2)
+        self.layout.addWidget(self.ws[2], 1, 1, 1, 1)
+        self.layout.addWidget(self.ws[3], 1, 2, 1, 1)
+        self.layout.addWidget(self.ws[4], 2, 0, 1, 2)
+        self.layout.addWidget(self.ws[5], 2, 2, 1, 1)
+
+    def test_valid_rectangles(self):
+        self.assertTrue(self.layout._is_rectangular(0, 0, 3, 3, False))
+        self.assertTrue(self.layout._is_rectangular(0, 0, 2, 1, False))
+        self.assertTrue(self.layout._is_rectangular(0, 1, 1, 2, False))
+        self.assertTrue(self.layout._is_rectangular(1, 1, 1, 1, False))
+        self.assertTrue(self.layout._is_rectangular(1, 2, 1, 1, False))
+        self.assertTrue(self.layout._is_rectangular(2, 0, 1, 2, False))
+        self.assertTrue(self.layout._is_rectangular(2, 2, 1, 1, False))
+        self.assertTrue(self.layout._is_rectangular(0, 0, 2, 3, False))
+        self.assertTrue(self.layout._is_rectangular(0, 1, 2, 2, False))
+        self.assertTrue(self.layout._is_rectangular(1, 2, 2, 1, False))
+
+    def test_invalid_rectangles(self):
+        self.assertFalse(self.layout._is_rectangular(0, 0, 4, 4, False))
+        self.assertFalse(self.layout._is_rectangular(0, 0, 2, 2, False))
+        self.assertFalse(self.layout._is_rectangular(1, 0, 2, 2, False))
+        self.assertFalse(self.layout._is_rectangular(1, 1, 2, 2, False))
+        self.assertFalse(self.layout._is_rectangular(0, 0, 3, 2, False))
+        self.assertFalse(self.layout._is_rectangular(0, 1, 3, 2, False))
+        self.assertFalse(self.layout._is_rectangular(1, 0, 2, 3, False))
+
 if __name__ == '__main__':
     unittest.main()
