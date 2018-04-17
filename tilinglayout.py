@@ -566,6 +566,7 @@ class QTilingLayout(QGridLayout):
                     common_height += 1
                 else:
                     heights.append((common_height, row - common_height))
+                    common_height = 1
                 prev_row = curr_row
             # Append the last one since the loop finishes before
             heights.append((common_height, row + 1 - common_height))
