@@ -42,10 +42,10 @@ class Widget(QWidget):
         self.name = name
 
     def __str__(self):
-        return str(self.name)
+        return 'Widget: {}'.format(self.name)
 
     def __repr__(self):
-        return str(self.name)
+        return 'Widget: {}'.format(self.name)
 
 
 def get_empty_tiling_layout():
@@ -61,8 +61,10 @@ class TransposedMethodsTestCase(unittest.TestCase):
     #  │   │    1     │
     #  │ 0 ├───┬──────┤
     #  │   │ 2 │      │
-    #  ├───┴───┤  3   │
+    #  ├───┴───┤      │
+    #  │       │  3   │
     #  │   4   │      │
+    #  │       │      │
     #  └───────┴──────┘
     def setUp(self):
         self.app = QApplication([])
@@ -71,24 +73,25 @@ class TransposedMethodsTestCase(unittest.TestCase):
         self.layout.addWidget(self.widgets[0], 0, 0, 2, 1)
         self.layout.addWidget(self.widgets[1], 0, 1, 1, 3)
         self.layout.addWidget(self.widgets[2], 1, 1, 1, 1)
-        self.layout.addWidget(self.widgets[3], 1, 2, 2, 2)
-        self.layout.addWidget(self.widgets[4], 2, 0, 1, 2)
+        self.layout.addWidget(self.widgets[3], 1, 2, 3, 2)
+        self.layout.addWidget(self.widgets[4], 2, 0, 2, 2)
 
     def test_add_widget(self):
-        new_widget = QWidget()
-        self.layout._add_widget(new_widget, 3, 0, 1, 4, False)
+        widget = self.widgets[3]
+        self.layout.removeWidget(widget)
+        self.layout._add_widget(widget, 1, 2, 3, 2, False)
         self.assertEqual(
-            self.layout.getItemPosition(self.layout.indexOf(new_widget)),
-            (3, 0, 1, 4)
+            self.layout.getItemPosition(self.layout.indexOf(widget)),
+            (1, 2, 3, 2)
         )
-        self.layout.removeWidget(new_widget)
+        self.layout.removeWidget(widget)
 
-        self.layout._add_widget(new_widget, 3, 0, 1, 4, True)
+        self.layout._add_widget(widget, 1, 2, 3, 2, True)
         self.assertEqual(
-            self.layout.getItemPosition(self.layout.indexOf(new_widget)),
-            (0, 3, 4, 1)
+            self.layout.getItemPosition(self.layout.indexOf(widget)),
+            (2, 1, 2, 3)
         )
-        self.layout.removeWidget(new_widget)
+        self.layout.removeWidget(widget)
 
     def test_row_count(self):
         self.assertEqual(self.layout._row_count(False),
@@ -135,7 +138,7 @@ class BorderHeightTestCase(unittest.TestCase):
     def setUp(self):
         self.app = QApplication([])
         self.layout = get_empty_tiling_layout()
-        self.ws = [Widget(i) for i in range(7)]
+        self.ws = [Widget(i) for i in range(6)]
         self.layout.addWidget(self.ws[0], 0, 0, 2, 1)
         self.layout.addWidget(self.ws[1], 0, 1, 1, 2)
         self.layout.addWidget(self.ws[2], 1, 1, 1, 1)
@@ -176,7 +179,7 @@ class IndependentBlockTestCase(unittest.TestCase):
     def setUp(self):
         self.app = QApplication([])
         self.layout = get_empty_tiling_layout()
-        self.ws = [Widget(i) for i in range(12)]
+        self.ws = [Widget(i) for i in range(11)]
         self.layout.addWidget(self.ws[0], 0, 0, 2, 1)
         self.layout.addWidget(self.ws[1], 0, 1, 1, 2)
         self.layout.addWidget(self.ws[2], 0, 3, 1, 2)
@@ -232,7 +235,7 @@ class SupportersTestCase(unittest.TestCase):
     def setUp(self):
         self.app = QApplication([])
         self.layout = get_empty_tiling_layout()
-        self.ws = [Widget(i) for i in range(8)]
+        self.ws = [Widget(i) for i in range(7)]
         self.layout.addWidget(self.ws[0], 0, 0, 1, 3)
         self.layout.addWidget(self.ws[1], 1, 0, 3, 1)
         self.layout.addWidget(self.ws[2], 1, 1, 1, 2)
@@ -281,6 +284,16 @@ class SupportersTestCase(unittest.TestCase):
 
 class EmptyBlockTestCase(unittest.TestCase):
 
+    #  ┌───┐
+    #  │ 0 │
+    #  └───┘
+    def test_no_empty_block(self):
+        app = QApplication([])
+        layout = get_empty_tiling_layout()
+        widgets = [QWidget() for _ in range(1)]
+        layout.addWidget(widgets[0], 0, 0, 1, 1)
+        self.assertIsNone(layout._find_empty_block(False))
+
     #  ┌───────────┬───┐
     #  │░░░░░░░░░░░│   │
     #  │░░░░░░░░░░░│   │
@@ -291,7 +304,7 @@ class EmptyBlockTestCase(unittest.TestCase):
     def test_find_empty_block1(self):
         app = QApplication([])
         layout = get_empty_tiling_layout()
-        widgets = [QWidget() for _ in range(3)]
+        widgets = [QWidget() for _ in range(2)]
         layout.addWidget(widgets[0], 0, 3, 3, 1)
         layout.addWidget(widgets[1], 2, 0, 1, 3)
         self.assertEqual(layout._find_empty_block(False), (0, 0, 2, 3))
@@ -306,7 +319,7 @@ class EmptyBlockTestCase(unittest.TestCase):
     def test_find_empty_block2(self):
         app = QApplication([])
         layout = get_empty_tiling_layout()
-        widgets = [QWidget() for _ in range(10)]
+        widgets = [QWidget() for _ in range(9)]
         layout.addWidget(widgets[0], 0, 2, 1, 2)
         layout.addWidget(widgets[1], 1, 0, 1, 1)
         layout.addWidget(widgets[2], 1, 1, 1, 1)
@@ -328,7 +341,7 @@ class EmptyBlockTestCase(unittest.TestCase):
     def test_find_empty_block3(self):
         app = QApplication([])
         layout = get_empty_tiling_layout()
-        widgets = [QWidget() for _ in range(10)]
+        widgets = [QWidget() for _ in range(9)]
         layout.addWidget(widgets[0], 0, 0, 1, 1)
         layout.addWidget(widgets[1], 0, 1, 1, 1)
         layout.addWidget(widgets[2], 0, 2, 1, 2)
@@ -341,16 +354,16 @@ class EmptyBlockTestCase(unittest.TestCase):
         self.assertEqual(layout._find_empty_block(False), (1, 0, 1, 2))
 
     #  ┌───┬───┬───────┐
-    #  │ 1 │ 2 │   0   │
+    #  │ 0 │ 1 │   2   │
     #  ├───┼───┼───┬───┤
-    #  │ 3 │ 4 │ 3 │ 4 │
+    #  │ 3 │ 4 │ 5 │ 6 │
     #  ├───┴───┼───┼───┤
-    #  │░░░░░░░│ 5 │ 6 │
+    #  │░░░░░░░│ 7 │ 8 │
     #  └───────┴───┴───┘
     def test_find_empty_block4(self):
         app = QApplication([])
         layout = get_empty_tiling_layout()
-        widgets = [QWidget() for _ in range(10)]
+        widgets = [QWidget() for _ in range(9)]
         layout.addWidget(widgets[0], 0, 0, 1, 1)
         layout.addWidget(widgets[1], 0, 1, 1, 1)
         layout.addWidget(widgets[2], 0, 2, 1, 2)
@@ -372,7 +385,7 @@ class EmptyBlockTestCase(unittest.TestCase):
     def test_find_empty_block5(self):
         app = QApplication([])
         layout = get_empty_tiling_layout()
-        widgets = [QWidget() for _ in range(11)]
+        widgets = [QWidget() for _ in range(10)]
         layout.addWidget(widgets[0], 0, 0, 1, 1)
         layout.addWidget(widgets[1], 0, 3, 1, 1)
         layout.addWidget(widgets[2], 1, 0, 1, 1)
@@ -395,7 +408,7 @@ class EmptyBlockTestCase(unittest.TestCase):
     def test_find_empty_block6(self):
         app = QApplication([])
         layout = get_empty_tiling_layout()
-        widgets = [QWidget() for _ in range(11)]
+        widgets = [QWidget() for _ in range(10)]
         layout.addWidget(widgets[0], 0, 0, 1, 1)
         layout.addWidget(widgets[1], 0, 1, 1, 1)
         layout.addWidget(widgets[2], 0, 2, 1, 1)
@@ -418,7 +431,7 @@ class EmptyBlockTestCase(unittest.TestCase):
     def test_find_empty_block7(self):
         app = QApplication([])
         layout = get_empty_tiling_layout()
-        widgets = [QWidget() for _ in range(11)]
+        widgets = [QWidget() for _ in range(10)]
         layout.addWidget(widgets[0], 0, 0, 1, 1)
         layout.addWidget(widgets[1], 0, 1, 1, 1)
         layout.addWidget(widgets[2], 0, 2, 1, 1)
@@ -441,7 +454,7 @@ class EmptyBlockTestCase(unittest.TestCase):
     def test_find_empty_block8(self):
         app = QApplication([])
         layout = get_empty_tiling_layout()
-        widgets = [QWidget() for _ in range(11)]
+        widgets = [QWidget() for _ in range(10)]
         layout.addWidget(widgets[0], 0, 0, 1, 1)
         layout.addWidget(widgets[1], 0, 1, 1, 1)
         layout.addWidget(widgets[2], 1, 0, 1, 1)
@@ -455,16 +468,16 @@ class EmptyBlockTestCase(unittest.TestCase):
         self.assertEqual(layout._find_empty_block(False), (0, 2, 1, 2))
 
     #  ┌───┬───┬───┬───┐
-    #  │ 1 │ 2 │ 1 │ 2 │
+    #  │ 0 │ 1 │ 2 │ 3 │
     #  ├───┼───┼───┴───┤
-    #  │ 3 │ 4 │░░░░░░░│
+    #  │ 4 │ 5 │░░░░░░░│
     #  ├───┼───┼───┬───┤
-    #  │ 5 │ 4 │ 3 │ 6 │
+    #  │ 6 │ 7 │ 8 │ 9 │
     #  └───┴───┴───┴───┘
     def test_find_empty_block9(self):
         app = QApplication([])
         layout = get_empty_tiling_layout()
-        widgets = [QWidget() for _ in range(11)]
+        widgets = [QWidget() for _ in range(10)]
         layout.addWidget(widgets[0], 0, 0, 1, 1)
         layout.addWidget(widgets[1], 0, 1, 1, 1)
         layout.addWidget(widgets[2], 0, 2, 1, 1)
@@ -487,7 +500,7 @@ class EmptyBlockTestCase(unittest.TestCase):
     def test_find_empty_block10(self):
         app = QApplication([])
         layout = get_empty_tiling_layout()
-        widgets = [QWidget() for _ in range(11)]
+        widgets = [QWidget() for _ in range(10)]
         layout.addWidget(widgets[0], 0, 0, 1, 1)
         layout.addWidget(widgets[1], 0, 1, 1, 1)
         layout.addWidget(widgets[2], 0, 2, 1, 1)
@@ -519,7 +532,7 @@ class CriticalBlockTestCase(unittest.TestCase):
     def setUp(self):
         app = QApplication([])
         self.layout = get_empty_tiling_layout()
-        self.widgets = [QWidget() for _ in range(16)]
+        self.widgets = [QWidget() for _ in range(15)]
         self.layout.addWidget(self.widgets[0], 0, 0, 1, 7)
         self.layout.addWidget(self.widgets[1], 1, 0, 1, 1)
         self.layout.addWidget(self.widgets[2], 1, 1, 1, 5)
@@ -591,6 +604,56 @@ class CriticalBlockTestCase(unittest.TestCase):
         )
 
 
+class CriticalBlockWithEmptySpacesTestCase(unittest.TestCase):
+
+    #  ┌───────────────────┐
+    #  │         0         │
+    #  ├───────┬───┬───────┤
+    #  │░░░░░░░│   │░░░░░░░│
+    #  ├───────┤   ├───────┤
+    #  │       │   │       │
+    #  │   1   │ 2 │   3   │
+    #  │       │   │       │
+    #  ├───────┤   ├───────┤
+    #  │░░░░░░░│   │░░░░░░░│
+    #  ├───────┴───┴───────┤
+    #  │         4         │
+    #  └───────────────────┘
+    def setUp(self):
+        app = QApplication([])
+        self.layout = get_empty_tiling_layout()
+        self.widgets = [QWidget() for _ in range(5)]
+        self.layout.addWidget(self.widgets[0], 0, 0, 1, 5)
+        self.layout.addWidget(self.widgets[1], 2, 0, 2, 2)
+        self.layout.addWidget(self.widgets[2], 1, 2, 4, 1)
+        self.layout.addWidget(self.widgets[3], 2, 3, 2, 2)
+        self.layout.addWidget(self.widgets[4], 5, 0, 1, 5)
+
+    def test_critical_block1(self):
+        self.assertEqual(
+            self.layout._find_critical_block(4, 2, True, True, False),
+            (2, 0, 2, 2)
+        )
+
+    def test_critical_block2(self):
+        self.assertEqual(
+            self.layout._find_critical_block(2, 2, False, True, False),
+            (2, 0, 2, 2)
+        )
+
+    def test_critical_block3(self):
+        self.assertEqual(
+            self.layout._find_critical_block(4, 3, True, False, False),
+            (2, 3, 2, 2)
+        )
+
+    def test_critical_block4(self):
+        self.assertEqual(
+            self.layout._find_critical_block(2, 3, False, False, False),
+            (2, 3, 2, 2)
+        )
+
+
 class IsRectangularTestCase(unittest.TestCase):
 
     #  ┌───┬───────┐
@@ -603,7 +666,7 @@ class IsRectangularTestCase(unittest.TestCase):
     def setUp(self):
         self.app = QApplication([])
         self.layout = get_empty_tiling_layout()
-        self.ws = [Widget(i) for i in range(7)]
+        self.ws = [Widget(i) for i in range(6)]
         self.layout.addWidget(self.ws[0], 0, 0, 2, 1)
         self.layout.addWidget(self.ws[1], 0, 1, 1, 2)
         self.layout.addWidget(self.ws[2], 1, 1, 1, 1)
@@ -631,6 +694,94 @@ class IsRectangularTestCase(unittest.TestCase):
         self.assertFalse(self.layout._is_rectangular(0, 0, 3, 2, False))
         self.assertFalse(self.layout._is_rectangular(0, 1, 3, 2, False))
         self.assertFalse(self.layout._is_rectangular(1, 0, 2, 3, False))
+
+
+class WidgetsInBlockTestCase(unittest.TestCase):
+
+    #  ┌───┬───────────┐
+    #  │   │     1     │
+    #  │ 0 ├───┬───┬───┤
+    #  │   │ 2 │ 3 │   │
+    #  ├───┴───┼───┤ 4 │
+    #  │   5   │ 6 │   │
+    #  └───────┴───┴───┘
+    def setUp(self):
+        self.app = QApplication([])
+        self.layout = get_empty_tiling_layout()
+        self.ws = [Widget(i) for i in range(7)]
+        self.layout.addWidget(self.ws[0], 0, 0, 2, 1)
+        self.layout.addWidget(self.ws[1], 0, 1, 1, 3)
+        self.layout.addWidget(self.ws[2], 1, 1, 1, 1)
+        self.layout.addWidget(self.ws[3], 1, 2, 1, 1)
+        self.layout.addWidget(self.ws[4], 1, 3, 2, 1)
+        self.layout.addWidget(self.ws[5], 2, 0, 1, 2)
+        self.layout.addWidget(self.ws[6], 2, 2, 1, 1)
+
+    def test_widgets_in_block(self):
+        self.assertEqual(set((w, self.layout._get_item_position(w, False))
+                             for w in self.ws),
+                         set(self.layout._get_widgets_in_block(0, 0, 3, 4,
+                                                               False)))
+
+
+class VirtualBlockTestCase(unittest.TestCase):
+
+    #  ┌───┬───────────┐
+    #  │   │     1     │
+    #  │ 0 ├───┬───────┤
+    #  │   │ 2 │       │
+    #  ├───┴───┤   3   │
+    #  │       │       │
+    #  │   4   ├───────┤
+    #  │       │   5   │
+    #  └───────┴───────┘
+    def setUp(self):
+        self.app = QApplication([])
+        self.layout = get_empty_tiling_layout()
+        self.ws = [Widget(i) for i in range(6)]
+        self.layout.addWidget(self.ws[0], 0, 0, 2, 1)
+        self.layout.addWidget(self.ws[1], 0, 1, 1, 3)
+        self.layout.addWidget(self.ws[2], 1, 1, 1, 1)
+        self.layout.addWidget(self.ws[3], 1, 2, 2, 2)
+        self.layout.addWidget(self.ws[4], 2, 0, 2, 2)
+        self.layout.addWidget(self.ws[5], 3, 2, 1, 2)
+
+    def test_virtualization(self):
+        self.assertEqual(self.layout._virtualize_block(0, 0, 4, 4, False),
+                        [[self.ws[0], self.ws[1], self.ws[1], self.ws[1]],
+                         [self.ws[0], self.ws[2], self.ws[3], self.ws[3]],
+                         [self.ws[4], self.ws[4], self.ws[3], self.ws[3]],
+                         [self.ws[4], self.ws[4], self.ws[5], self.ws[5]]])
+
+    def test_subset_virtualization(self):
+        self.assertEqual(self.layout._virtualize_block(1, 2, 3, 2, False),
+                        [[self.ws[3], self.ws[3]],
+                         [self.ws[3], self.ws[3]],
+                         [self.ws[5], self.ws[5]]])
+
+    def test_materialization(self):
+        virtual = self.layout._virtualize_block(0, 0, 4, 4, False)
+        self.assertEqual(list(self.layout._materialize_virtual_block(0, 0,
+                                                                     virtual)),
+                         [(w, self.layout._get_item_position(w, False))
+                          for w in self.ws])
+
+    def test_displaced_materialization(self):
+        virtual = self.layout._virtualize_block(0, 0, 4, 4, False)
+        offset = (1, 2)
+        expected = [(w, self.layout._get_item_position(w, False))
+                    for w in self.ws]
+        for i in range(0, len(expected)):
+            widget, pos = expected[i]
+            expected[i] = (widget, (pos[0] + offset[0], pos[1] + offset[1],
+                                    pos[2], pos[3]))
+
+
+        self.assertEqual(list(self.layout._materialize_virtual_block(*offset,
+                                                                     virtual)),
+                         expected)
+
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -16,6 +16,11 @@ class QTilingLayout(QGridLayout):
         self.max_span = max_span
         self._add_widget(widget, 0, 0, self.max_span, self.max_span, False)
 
+    def _is_point_inside_grid(self, row, col):
+        # return 0 <= row < self.max_span and 0 <= col < self.max_span
+        # TODO: fix tests to use the previous line
+        return 0 <= row < self.rowCount() and 0 <= col < self.columnCount()
+
     def _add_widget(self, widget, row, col, rowspan, colspan, transpose):
         """Invokes QGridLayout.addWidget on a possibly transposed grid.
 
@@ -28,8 +33,10 @@ class QTilingLayout(QGridLayout):
             transpose: If True, will behave as if the grid was transposed.
         """
         if not transpose:
+            assert self._is_point_inside_grid(row, col), 'Point outside grid'
             return self.addWidget(widget, row, col, rowspan, colspan)
         else:
+            assert self._is_point_inside_grid(col, row), 'Point outside grid'
             return self.addWidget(widget, col, row, colspan, rowspan)
 
     def _column_count(self, transpose):
@@ -66,8 +73,10 @@ class QTilingLayout(QGridLayout):
             transpose: If True, will behave as if the grid was transposed.
         """
         if not transpose:
+            assert self._is_point_inside_grid(row, col), 'Point outside grid'
             return self.itemAtPosition(row, col)
         else:
+            assert self._is_point_inside_grid(col, row), 'Point outside grid'
             return self.itemAtPosition(col, row)
 
     def _row_count(self, transpose):
@@ -150,27 +159,142 @@ class QTilingLayout(QGridLayout):
                 for col in range(old_pos[1], old_pos[1] + old_pos[3]):
                     remspans[col] = (row + height, max(0, curr_rem - 1))
 
-            empty_block = self._find_empty_block(transpose)
-            adjusted = longest_branches_widgets.union(new_widget)
-            while empty_block:
-                # Figure out where to start searching our critical block and in
-                # what directions
-                top_item = self._item_at_position(empty_block[0] - 1,
-                                                  empty_block[1],
-                                                  transpose)
-                left_item = self._item_at_position(empty_block[0],
-                                                   empty_block[1] - 1,
-                                                   transpose)
-                up = top_item is None or top_item.widget() not in adjusted
-                left = left_item is None or left_item.widget() not in adjusted
-                i = empty_block[0] + (0 if up else empty_block[2])
-                j = empty_block[1] + (empty_block[3] if left else 0)
-                critical_block = self._find_critical_block(i, j, up, left,
-                                                           transpose)
-                # resize block
-                adjusted = adjusted.union(critical_block)
+            all_supporters = top_supporters.all_nodes().union(
+                bottom_supporters.all_nodes(), {new_widget}
+            )
+            self._fix_unaligned_widgets(ib, all_supporters, transpose)
+
         else:
             raise NotImplementedError
+
+    def _fix_unaligned_widgets(self, independent_block, supporters, transpose):
+        domain = (0, independent_block[0], self._row_count(transpose),
+                  independent_block[1])
+        unaligned_block, up, free_space_height = self._find_unaligned_block(
+            domain,
+            supporters,
+            transpose
+        )
+        while unaligned_block:
+            empty_space_width = 0
+            if (
+                    (up and unaligned_block[0] > 0) or
+                    (not up and unaligned_block[0] + unaligned_block[2] <
+                     self._row_count(transpose))
+            ):
+                for j in range(unaligned_block[1],
+                               unaligned_block[1] + unaligned_block[3]):
+                    i = (unaligned_block[0] - 1 if up
+                         else unaligned_block[0] + unaligned_block[2])
+                    if not self._item_at_position(i, j, transpose):
+                        empty_space_width += 1
+
+            if empty_space_width == 0:
+                # The block has no space to move at all, so shrink it
+                self._displace_and_resize(*unaligned_block, 0 if up else free_space_height,
+                                          -free_space_height, transpose)
+                unaligned_block, up, free_space_height = self._find_unaligned_block(
+                    domain,
+                    supporters,
+                    transpose
+                )
+            elif empty_space_width == unaligned_block[3]:
+                # The block has space to move, so move it and resize it if
+                # necessary
+                space_to_fill = 0
+                next_item = None
+                while not next_item:
+                    space_to_fill += 1
+                    i = (unaligned_block[0] - space_to_fill - 1 if up
+                         else unaligned_block[0] + unaligned_block[2] +
+                         space_to_fill)
+                    next_item = self._item_at_position(i, unaligned_block[1],
+                                                       transpose)
+                self._displace_and_resize(*unaligned_block,
+                                          space_to_fill * (-1 if up else 1),
+                                          space_to_fill + free_space_height - unaligned_block[2],
+                                          transpose)
+                unaligned_block, up, free_space_height = self._find_unaligned_block(
+                    domain,
+                    supporters,
+                    transpose
+                )
+            else:
+                # The block has space below or above it but not wide enough to
+                # move, there must be another unaliged block below or above it
+                new_domain = (
+                    (domain[0] if up
+                     else unaligned_block[0] + unaligned_block[2]),
+                    domain[1],
+                    (unaligned_block[0] + unaligned_block[2] if up
+                     else domain[2] - unaligned_block[0] - unaligned_block[2]),
+                    domain[3]
+                )
+                unaligned_block, up, free_space_height = self._find_unaligned_block(
+                    new_domain,
+                    supporters,
+                    transpose
+                )
+
+    def _find_unaligned_block(self, domain, supporters, transpose):
+        empty_space = None
+        left = True
+        for widget, pos in self._get_widgets_in_block(*domain, transpose):
+            if widget in supporters:
+                continue
+
+            for i in range(pos[0], pos[0] + pos[2]):
+                if pos[1] > domain[1]:
+                    if not self._item_at_position(i, pos[1] - 1, transpose):
+                        empty_space = (i, pos[1] - 1)
+                        break
+                if pos[1] + pos[3] < domain[1] + domain[3]:
+                    if not self._item_at_position(i, pos[1] + pos[3],
+                                                  transpose):
+                        left = False
+                        empty_space = (i, pos[1] + pos[3])
+                        break
+
+            if empty_space:
+                # Now find out if it has a support widget on top or beneath it
+                top_item = bottom_item = top_row = bottom_row =None
+                offset = 1
+                while not top_item or not bottom_item:
+                    if not top_item:
+                        top_row = empty_space[0] - offset
+                        top_item = self._item_at_position(top_row,
+                                                          empty_space[1],
+                                                          transpose)
+                    if not bottom_item:
+                        bottom_row = empty_space[0] + offset
+                        bottom_item = self._item_at_position(bottom_row,
+                                                             empty_space[1],
+                                                             transpose)
+                    offset += 1
+
+                if top_item.widget() in supporters:
+                    critical_block = self._find_critical_block(
+                        bottom_row,
+                        empty_space[1] + (1 if left else 0),
+                        True,
+                        not left,
+                        transpose
+                    )
+                    return critical_block, True, bottom_row - top_row - 1
+                elif bottom_item.widget() in supporters:
+                    critical_block = self._find_critical_block(
+                        top_row + 1,
+                        empty_space[1] + (1 if left else 0),
+                        False,
+                        not left,
+                        transpose
+                    )
+                    return critical_block, False, bottom_row - top_row - 1
+                # The empty space should've had a support widget either above
+                # or below it. It seems we reached an invalid state.
+                # TODO: somehow dump the state of the whole layout
+                raise ValueError('Invalid unaligned block found')
+        return None, None, None
 
     def _get_independent_block(self, widget, transpose):
         pos = self._get_item_position(widget, transpose)
@@ -218,22 +342,26 @@ class QTilingLayout(QGridLayout):
         index = row
         reached_end = False
         while not reached_end:
-            widget = self._item_at_position(index - 1 if up else index,
-                                            col, transpose).widget()
-            pos = self._get_item_position(widget, transpose)
-            if pos[1] == col:
-                index = pos[0] if up else pos[0] + pos[2]
-                reached_end = index == 0 if up else index == rows
+            item = self._item_at_position(index - 1 if up else index,
+                                          col, transpose)
+            if item:
+                pos = self._get_item_position(item.widget(), transpose)
+                if pos[1] == col:
+                    index = pos[0] if up else pos[0] + pos[2]
+                    reached_end = index == 0 if up else index == rows
+                else:
+                    reached_end = True
             else:
-                reached_end = True
+                index += -1 if up else 1
+                reached_end = index == 0 if up else index == rows
 
         return row - index if up else index - row
 
-    def _get_supporters(self, widget, before, transpose):
-        """Returns a tree of "support" widgets for the specified widget.
+    def _get_supporters(self, block, before, transpose):
+        """Returns a tree of "support" widgets for the specified block.
 
         A support widget is a widget that is (directly or indirectly) "pushed"
-        by the specified widget when it grows.
+        by the specified block (or widget) when it grows.
 
         Args:
             block: The widget (or position) for which to find supporters.
@@ -242,20 +370,25 @@ class QTilingLayout(QGridLayout):
             transpose: If True, will behave as if the grid was transposed.
         """
         supporters = []
-        pos = self._get_item_position(widget, transpose)
+        pos = self._get_item_position(block, transpose) \
+              if isinstance(block, QWidget) else block
         pivot = pos[0] - 1 if before else pos[0] + pos[2]
         col = pos[1]
         upper_limit = self._row_count(transpose)
         within_limits = (pivot >= 0) if before else (pivot < upper_limit)
         if within_limits:
             while col < pos[1] + pos[3]:
-                supporter = self._item_at_position(pivot, col,
-                                                   transpose).widget()
-                supporters.append(supporter)
-                supporter_pos = self._get_item_position(supporter, transpose)
-                col = supporter_pos[1] + supporter_pos[3]
-        return TreeNode(widget, [self._get_supporters(w, before, transpose)
-                                 for w in supporters])
+                item = self._item_at_position(pivot, col, transpose)
+                if item:
+                    supporter = item.widget()
+                    supporters.append(supporter)
+                    supporter_pos = self._get_item_position(supporter,
+                                                            transpose)
+                    col = supporter_pos[1] + supporter_pos[3]
+                else:
+                    col += 1
+        return TreeNode(block, [self._get_supporters(w, before, transpose)
+                                for w in supporters])
 
     def _find_empty_block(self, transpose):
         """Finds a block made entirely of empty space.
@@ -266,9 +399,10 @@ class QTilingLayout(QGridLayout):
         Args:
             transpose: If True, will behave as if the grid was transposed.
         """
+        #TODO: find a way to avoid looping over every row
         i = -1
         found = False
-        while not found and i < self._row_count(transpose):
+        while not found and i < self._row_count(transpose) - 1:
             i += 1
             j = 0
             while not found and j < self._column_count(transpose):
@@ -312,6 +446,21 @@ class QTilingLayout(QGridLayout):
             transpose: If True, will behave as if the grid was transposed.
         """
         first_border = self._get_border_height(i, j, up, transpose)
+        # But hang on, there could be empty space on the other side of this
+        # border, so we're gonna check and shrink it if necessary
+        item = self._item_at_position(
+            i + (-first_border if up else first_border - 1),
+            j - 1 if left else j,
+            transpose
+        )
+        while not item:
+            first_border -= 1
+            item = self._item_at_position(
+                i + (first_border - 1) * (-1 if up else 1),
+                j - 1 if left else j,
+                transpose
+            )
+
         is_rectangular = False
         pivot = j
         while not is_rectangular:
@@ -384,6 +533,100 @@ class QTilingLayout(QGridLayout):
         except (AttributeError, AssertionError):
             return False
 
+    def _get_widgets_in_block(self, i, j, rowspan, colspan, transpose):
+        #TODO: find a way to avoid looping over every row
+        done = set()
+        row = i
+        while row < i + rowspan:
+            col = 0
+            while col < j + colspan:
+                item = self._item_at_position(row, col, transpose)
+                if item:
+                    widget = item.widget()
+                    pos = self._get_item_position(widget, transpose)
+                    if widget not in done:
+                        yield widget, pos
+                        done.add(widget)
+                    col += pos[3]
+                else:
+                    col += 1
+            row += 1
+
+    def _displace_and_resize(self, i, j, rowspan, colspan, displacement,
+                             growth, transpose):
+        heights = []
+        virtual_block = self._virtualize_block(i, j, rowspan, colspan,
+                                               transpose)
+        if growth:
+            prev_row = None
+            common_height = 0
+            for row in range(len(virtual_block)):
+                curr_row = virtual_block[row]
+                if not prev_row or curr_row == prev_row:
+                    common_height += 1
+                else:
+                    heights.append((common_height, row - common_height))
+                prev_row = curr_row
+            # Append the last one since the loop finishes before
+            heights.append((common_height, row + 1 - common_height))
+
+            best = max if growth < 0 else min
+            marked_rows = []
+            while growth:
+                height, row = best(heights)
+
+                if height == 1 and growth < 0:
+                    raise SplitLimitException
+
+                marked_rows.append(row)
+                if growth < 0:
+                    growth += 1
+                    heights[heights.index((height, row))] = (height - 1, row)
+                else:
+                    growth -= 1
+                    heights[heights.index((height, row))] = (height + 1, row)
+
+            new_virtual_block = []
+            for index, row in enumerate(virtual_block):
+                if index in marked_rows:
+                    if growth > 0:
+                        new_virtual_block.append(row)
+                        new_virtual_block.append(row)
+                    else:
+                        # Nothing, we skip this row
+                        pass
+                else:
+                    new_virtual_block.append(row)
+            virtual_block = new_virtual_block
+
+        materialized = self._materialize_virtual_block(i + displacement, j,
+                                                       virtual_block)
+        for widget, pos in materialized:
+            self.removeWidget(widget)
+            self._add_widget(widget, *pos, transpose)
+
+    def _virtualize_block(self, i, j, rowspan, colspan, transpose):
+        return [
+            [self._item_at_position(row, col, transpose).widget()
+             for col in range(j, j + colspan)]
+            for row in range(i, i + rowspan)
+        ]
+
+    def _materialize_virtual_block(self, i, j, virtual_block):
+        block = {}
+        for row in range(len(virtual_block)):
+            for col in range(len(virtual_block[0])):
+                widget = virtual_block[row][col]
+                if widget in block:
+                    pos = block[widget][:2]
+                    block[widget] = (*pos,
+                                     i + row - pos[0] + 1,
+                                     j + col - pos[1] + 1)
+                else:
+                    block[widget] = (i + row, j + col, 1, 1)
+
+        return block.items()
+
 
 class TreeNode:
 
@@ -401,3 +644,7 @@ class TreeNode:
         return {self.value}.union(*(child.longest_branches_nodes()
                                     for child in self.children
                                     if child.height == self.height - 1))
+
+    def all_nodes(self):
+        return {self.value}.union(*(child.all_nodes()
+                                    for child in self.children))
