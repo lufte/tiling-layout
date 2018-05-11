@@ -7,7 +7,10 @@ from unittest.mock import Mock, patch
 from PyQt5.QtWidgets import QWidget, QApplication
 
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
-from tilinglayout import QTilingLayout, TreeNode
+from tilinglayout import (QTilingLayout, TreeNode, EmptyBlock, ShortBlock,
+                          WidgetInEmptyBlockException, CriticalBlock,
+                          EmptySpaceInCriticalBlockException,
+                          PointOutsideGridException)
 
 
 class TreeNodeTestCase(unittest.TestCase):
@@ -126,47 +129,6 @@ class TransposedMethodsTestCase(unittest.TestCase):
                           QWidget(), True)
 
 
-class BorderHeightTestCase(unittest.TestCase):
-
-    #  ┌───┬───────┐
-    #  │   │   1   │
-    #  │ 0 ├───┬───┤
-    #  │   │ 2 │ 3 │
-    #  ├───┴───┼───┤
-    #  │   4   │ 5 │
-    #  └───────┴───┘
-    def setUp(self):
-        self.app = QApplication([])
-        self.layout = get_empty_tiling_layout()
-        self.ws = [Widget(i) for i in range(6)]
-        self.layout.addWidget(self.ws[0], 0, 0, 2, 1)
-        self.layout.addWidget(self.ws[1], 0, 1, 1, 2)
-        self.layout.addWidget(self.ws[2], 1, 1, 1, 1)
-        self.layout.addWidget(self.ws[3], 1, 2, 1, 1)
-        self.layout.addWidget(self.ws[4], 2, 0, 1, 2)
-        self.layout.addWidget(self.ws[5], 2, 2, 1, 1)
-
-    def test_all_heights(self):
-        self.assertEqual(self.layout._get_border_height(0, 0, False, False), 3)
-        self.assertEqual(self.layout._get_border_height(0, 0, True, False), 0)
-        self.assertEqual(self.layout._get_border_height(0, 1, False, False), 2)
-        self.assertEqual(self.layout._get_border_height(0, 1, True, False), 0)
-        self.assertEqual(self.layout._get_border_height(0, 2, False, False), 0)
-        self.assertEqual(self.layout._get_border_height(0, 2, True, False), 0)
-        self.assertEqual(self.layout._get_border_height(1, 0, False, False), 2)
-        self.assertEqual(self.layout._get_border_height(1, 0, True, False), 1)
-        self.assertEqual(self.layout._get_border_height(1, 1, False, False), 1)
-        self.assertEqual(self.layout._get_border_height(1, 1, True, False), 1)
-        self.assertEqual(self.layout._get_border_height(1, 2, False, False), 2)
-        self.assertEqual(self.layout._get_border_height(1, 2, True, False), 0)
-        self.assertEqual(self.layout._get_border_height(2, 0, False, False), 1)
-        self.assertEqual(self.layout._get_border_height(2, 0, True, False), 2)
-        self.assertEqual(self.layout._get_border_height(2, 1, False, False), 0)
-        self.assertEqual(self.layout._get_border_height(2, 1, True, False), 2)
-        self.assertEqual(self.layout._get_border_height(2, 2, False, False), 1)
-        self.assertEqual(self.layout._get_border_height(2, 2, True, False), 1)
-
-
 class IndependentBlockTestCase(unittest.TestCase):
 
     #  ┌───┬───────┬───────┬───┐
@@ -193,30 +155,29 @@ class IndependentBlockTestCase(unittest.TestCase):
         self.layout.addWidget(self.ws[10], 2, 5, 1, 1)
 
     def test_all_widgets(self):
-        # self.assertEqual(self.layout._get_independent_block(self.ws[0], False),
-        #                  (0, 3))
-        # self.assertEqual(self.layout._get_independent_block(self.ws[1], False),
-        #                  (0, 3))
-        # self.assertEqual(self.layout._get_independent_block(self.ws[2], False),
-        #                  (3, 2))
-        # self.assertEqual(self.layout._get_independent_block(self.ws[3], False),
-        #                  (5, 1))
-        # self.assertEqual(self.layout._get_independent_block(self.ws[4], False),
-        #                  (0, 3))
-        # self.assertEqual(self.layout._get_independent_block(self.ws[5], False),
-        #                  (0, 3))
-        # self.assertEqual(self.layout._get_independent_block(self.ws[6], False),
-        #                  (3, 2))
-        # self.assertEqual(self.layout._get_independent_block(self.ws[7], False),
-        #                  (3, 2))
-        # self.assertEqual(self.layout._get_independent_block(self.ws[8], False),
-        #                  (0, 3))
-        # self.assertEqual(self.layout._get_independent_block(self.ws[9], False),
-        #                  (3, 2))
-        # self.assertEqual(self.layout._get_independent_block(self.ws[10],
-        #                                                     False),
-        #                  (5, 1))
-        self.assertEqual(self.layout._get_border_height(0, 3, False, False), 3)
+        self.assertEqual(self.layout._get_independent_block(self.ws[0], False),
+                         CriticalBlock(self.layout, False, 0, 0, 3, 3))
+        self.assertEqual(self.layout._get_independent_block(self.ws[1], False),
+                         CriticalBlock(self.layout, False, 0, 0, 3, 3))
+        self.assertEqual(self.layout._get_independent_block(self.ws[2], False),
+                         CriticalBlock(self.layout, False, 0, 3, 3, 2))
+        self.assertEqual(self.layout._get_independent_block(self.ws[3], False),
+                         CriticalBlock(self.layout, False, 0, 5, 3, 1))
+        self.assertEqual(self.layout._get_independent_block(self.ws[4], False),
+                         CriticalBlock(self.layout, False, 0, 0, 3, 3))
+        self.assertEqual(self.layout._get_independent_block(self.ws[5], False),
+                         CriticalBlock(self.layout, False, 0, 0, 3, 3))
+        self.assertEqual(self.layout._get_independent_block(self.ws[6], False),
+                         CriticalBlock(self.layout, False, 0, 3, 3, 2))
+        self.assertEqual(self.layout._get_independent_block(self.ws[7], False),
+                         CriticalBlock(self.layout, False, 0, 3, 3, 2))
+        self.assertEqual(self.layout._get_independent_block(self.ws[8], False),
+                         CriticalBlock(self.layout, False, 0, 0, 3, 3))
+        self.assertEqual(self.layout._get_independent_block(self.ws[9], False),
+                         CriticalBlock(self.layout, False, 0, 3, 3, 2))
+        self.assertEqual(self.layout._get_independent_block(self.ws[10],
+                                                            False),
+                         CriticalBlock(self.layout, False, 0, 5, 3, 1))
 
 
 class SupportersTestCase(unittest.TestCase):
@@ -282,446 +243,91 @@ class SupportersTestCase(unittest.TestCase):
         self.assertEqual(supporters.children[0].children[0].children, [])
 
 
-class EmptyBlockTestCase(unittest.TestCase):
-
-    #  ┌───┐
-    #  │ 0 │
-    #  └───┘
-    def test_no_empty_block(self):
-        app = QApplication([])
-        layout = get_empty_tiling_layout()
-        widgets = [QWidget() for _ in range(1)]
-        layout.addWidget(widgets[0], 0, 0, 1, 1)
-        self.assertIsNone(layout._find_empty_block(False))
-
-    #  ┌───────────┬───┐
-    #  │░░░░░░░░░░░│   │
-    #  │░░░░░░░░░░░│   │
-    #  │░░░░░░░░░░░│ 0 │
-    #  ├───────────┤   │
-    #  │     1     │   │
-    #  └───────────┴───┘
-    def test_find_empty_block1(self):
-        app = QApplication([])
-        layout = get_empty_tiling_layout()
-        widgets = [QWidget() for _ in range(2)]
-        layout.addWidget(widgets[0], 0, 3, 3, 1)
-        layout.addWidget(widgets[1], 2, 0, 1, 3)
-        self.assertEqual(layout._find_empty_block(False), (0, 0, 2, 3))
-
-    #  ┌───────┬───────┐
-    #  │░░░░░░░│   0   │
-    #  ├───┬───┼───┬───┤
-    #  │ 1 │ 2 │ 3 │ 4 │
-    #  ├───┼───┼───┼───┤
-    #  │ 5 │ 6 │ 7 │ 8 │
-    #  └───┴───┴───┴───┘
-    def test_find_empty_block2(self):
-        app = QApplication([])
-        layout = get_empty_tiling_layout()
-        widgets = [QWidget() for _ in range(9)]
-        layout.addWidget(widgets[0], 0, 2, 1, 2)
-        layout.addWidget(widgets[1], 1, 0, 1, 1)
-        layout.addWidget(widgets[2], 1, 1, 1, 1)
-        layout.addWidget(widgets[3], 1, 2, 1, 1)
-        layout.addWidget(widgets[4], 1, 3, 1, 1)
-        layout.addWidget(widgets[5], 2, 0, 1, 1)
-        layout.addWidget(widgets[6], 2, 1, 1, 1)
-        layout.addWidget(widgets[7], 2, 2, 1, 1)
-        layout.addWidget(widgets[8], 2, 3, 1, 1)
-        self.assertEqual(layout._find_empty_block(False), (0, 0, 1, 2))
-
-    #  ┌───┬───┬───────┐
-    #  │ 0 │ 1 │   2   │
-    #  ├───┴───┼───┬───┤
-    #  │░░░░░░░│ 3 │ 4 │
-    #  ├───┬───┼───┼───┤
-    #  │ 5 │ 6 │ 7 │ 8 │
-    #  └───┴───┴───┴───┘
-    def test_find_empty_block3(self):
-        app = QApplication([])
-        layout = get_empty_tiling_layout()
-        widgets = [QWidget() for _ in range(9)]
-        layout.addWidget(widgets[0], 0, 0, 1, 1)
-        layout.addWidget(widgets[1], 0, 1, 1, 1)
-        layout.addWidget(widgets[2], 0, 2, 1, 2)
-        layout.addWidget(widgets[3], 1, 2, 1, 1)
-        layout.addWidget(widgets[4], 1, 3, 1, 1)
-        layout.addWidget(widgets[5], 2, 0, 1, 1)
-        layout.addWidget(widgets[6], 2, 1, 1, 1)
-        layout.addWidget(widgets[7], 2, 2, 1, 1)
-        layout.addWidget(widgets[8], 2, 3, 1, 1)
-        self.assertEqual(layout._find_empty_block(False), (1, 0, 1, 2))
-
-    #  ┌───┬───┬───────┐
-    #  │ 0 │ 1 │   2   │
-    #  ├───┼───┼───┬───┤
-    #  │ 3 │ 4 │ 5 │ 6 │
-    #  ├───┴───┼───┼───┤
-    #  │░░░░░░░│ 7 │ 8 │
-    #  └───────┴───┴───┘
-    def test_find_empty_block4(self):
-        app = QApplication([])
-        layout = get_empty_tiling_layout()
-        widgets = [QWidget() for _ in range(9)]
-        layout.addWidget(widgets[0], 0, 0, 1, 1)
-        layout.addWidget(widgets[1], 0, 1, 1, 1)
-        layout.addWidget(widgets[2], 0, 2, 1, 2)
-        layout.addWidget(widgets[3], 1, 0, 1, 1)
-        layout.addWidget(widgets[4], 1, 1, 1, 1)
-        layout.addWidget(widgets[5], 1, 2, 1, 1)
-        layout.addWidget(widgets[6], 1, 3, 1, 1)
-        layout.addWidget(widgets[7], 2, 2, 1, 1)
-        layout.addWidget(widgets[8], 2, 3, 1, 1)
-        self.assertEqual(layout._find_empty_block(False), (2, 0, 1, 2))
-
-    #  ┌───┬───────┬───┐
-    #  │ 0 │░░░░░░░│ 1 │
-    #  ├───┼───┬───┼───┤
-    #  │ 2 │ 3 │ 4 │ 5 │
-    #  ├───┼───┼───┼───┤
-    #  │ 6 │ 7 │ 8 │ 9 │
-    #  └───┴───┴───┴───┘
-    def test_find_empty_block5(self):
-        app = QApplication([])
-        layout = get_empty_tiling_layout()
-        widgets = [QWidget() for _ in range(10)]
-        layout.addWidget(widgets[0], 0, 0, 1, 1)
-        layout.addWidget(widgets[1], 0, 3, 1, 1)
-        layout.addWidget(widgets[2], 1, 0, 1, 1)
-        layout.addWidget(widgets[3], 1, 1, 1, 1)
-        layout.addWidget(widgets[4], 1, 2, 1, 1)
-        layout.addWidget(widgets[5], 1, 3, 1, 1)
-        layout.addWidget(widgets[6], 2, 0, 1, 1)
-        layout.addWidget(widgets[7], 2, 1, 1, 1)
-        layout.addWidget(widgets[8], 2, 2, 1, 1)
-        layout.addWidget(widgets[9], 2, 3, 1, 1)
-        self.assertEqual(layout._find_empty_block(False), (0, 1, 1, 2))
-
-    #  ┌───┬───┬───┬───┐
-    #  │ 0 │ 1 │ 2 │ 3 │
-    #  ├───┼───┴───┼───┤
-    #  │ 4 │░░░░░░░│ 5 │
-    #  ├───┼───┬───┼───┤
-    #  │ 6 │ 7 │ 8 │ 9 │
-    #  └───┴───┴───┴───┘
-    def test_find_empty_block6(self):
-        app = QApplication([])
-        layout = get_empty_tiling_layout()
-        widgets = [QWidget() for _ in range(10)]
-        layout.addWidget(widgets[0], 0, 0, 1, 1)
-        layout.addWidget(widgets[1], 0, 1, 1, 1)
-        layout.addWidget(widgets[2], 0, 2, 1, 1)
-        layout.addWidget(widgets[3], 0, 3, 1, 1)
-        layout.addWidget(widgets[4], 1, 0, 1, 1)
-        layout.addWidget(widgets[5], 1, 3, 1, 1)
-        layout.addWidget(widgets[6], 2, 0, 1, 1)
-        layout.addWidget(widgets[7], 2, 1, 1, 1)
-        layout.addWidget(widgets[8], 2, 2, 1, 1)
-        layout.addWidget(widgets[9], 2, 3, 1, 1)
-        self.assertEqual(layout._find_empty_block(False), (1, 1, 1, 2))
-
-    #  ┌───┬───┬───┬───┐
-    #  │ 0 │ 1 │ 2 │ 3 │
-    #  ├───┼───┼───┼───┤
-    #  │ 4 │ 5 │ 6 │ 7 │
-    #  ├───┼───┴───┼───┤
-    #  │ 8 │░░░░░░░│ 9 │
-    #  └───┴───────┴───┘
-    def test_find_empty_block7(self):
-        app = QApplication([])
-        layout = get_empty_tiling_layout()
-        widgets = [QWidget() for _ in range(10)]
-        layout.addWidget(widgets[0], 0, 0, 1, 1)
-        layout.addWidget(widgets[1], 0, 1, 1, 1)
-        layout.addWidget(widgets[2], 0, 2, 1, 1)
-        layout.addWidget(widgets[3], 0, 3, 1, 1)
-        layout.addWidget(widgets[4], 1, 0, 1, 1)
-        layout.addWidget(widgets[5], 1, 1, 1, 1)
-        layout.addWidget(widgets[6], 1, 2, 1, 1)
-        layout.addWidget(widgets[7], 1, 3, 1, 1)
-        layout.addWidget(widgets[8], 2, 0, 1, 1)
-        layout.addWidget(widgets[9], 2, 3, 1, 1)
-        self.assertEqual(layout._find_empty_block(False), (2, 1, 1, 2))
-
-    #  ┌───┬───┬───────┐
-    #  │ 0 │ 1 │░░░░░░░│
-    #  ├───┼───┼───┬───┤
-    #  │ 2 │ 3 │ 4 │ 5 │
-    #  ├───┼───┼───┼───┤
-    #  │ 6 │ 7 │ 8 │ 9 │
-    #  └───┴───┴───┴───┘
-    def test_find_empty_block8(self):
-        app = QApplication([])
-        layout = get_empty_tiling_layout()
-        widgets = [QWidget() for _ in range(10)]
-        layout.addWidget(widgets[0], 0, 0, 1, 1)
-        layout.addWidget(widgets[1], 0, 1, 1, 1)
-        layout.addWidget(widgets[2], 1, 0, 1, 1)
-        layout.addWidget(widgets[3], 1, 1, 1, 1)
-        layout.addWidget(widgets[4], 1, 2, 1, 1)
-        layout.addWidget(widgets[5], 1, 3, 1, 1)
-        layout.addWidget(widgets[6], 2, 0, 1, 1)
-        layout.addWidget(widgets[7], 2, 1, 1, 1)
-        layout.addWidget(widgets[8], 2, 2, 1, 1)
-        layout.addWidget(widgets[9], 2, 3, 1, 1)
-        self.assertEqual(layout._find_empty_block(False), (0, 2, 1, 2))
-
-    #  ┌───┬───┬───┬───┐
-    #  │ 0 │ 1 │ 2 │ 3 │
-    #  ├───┼───┼───┴───┤
-    #  │ 4 │ 5 │░░░░░░░│
-    #  ├───┼───┼───┬───┤
-    #  │ 6 │ 7 │ 8 │ 9 │
-    #  └───┴───┴───┴───┘
-    def test_find_empty_block9(self):
-        app = QApplication([])
-        layout = get_empty_tiling_layout()
-        widgets = [QWidget() for _ in range(10)]
-        layout.addWidget(widgets[0], 0, 0, 1, 1)
-        layout.addWidget(widgets[1], 0, 1, 1, 1)
-        layout.addWidget(widgets[2], 0, 2, 1, 1)
-        layout.addWidget(widgets[3], 0, 3, 1, 1)
-        layout.addWidget(widgets[4], 1, 0, 1, 1)
-        layout.addWidget(widgets[5], 1, 1, 1, 1)
-        layout.addWidget(widgets[6], 2, 0, 1, 1)
-        layout.addWidget(widgets[7], 2, 1, 1, 1)
-        layout.addWidget(widgets[8], 2, 2, 1, 1)
-        layout.addWidget(widgets[9], 2, 3, 1, 1)
-        self.assertEqual(layout._find_empty_block(False), (1, 2, 1, 2))
-
-    #  ┌───┬───┬───┬───┐
-    #  │ 0 │ 1 │ 2 │ 3 │
-    #  ├───┼───┼───┼───┤
-    #  │ 4 │ 5 │ 6 │ 7 │
-    #  ├───┼───┼───┴───┤
-    #  │ 8 │ 9 │░░░░░░░│
-    #  └───┴───┴───────┘
-    def test_find_empty_block10(self):
-        app = QApplication([])
-        layout = get_empty_tiling_layout()
-        widgets = [QWidget() for _ in range(10)]
-        layout.addWidget(widgets[0], 0, 0, 1, 1)
-        layout.addWidget(widgets[1], 0, 1, 1, 1)
-        layout.addWidget(widgets[2], 0, 2, 1, 1)
-        layout.addWidget(widgets[3], 0, 3, 1, 1)
-        layout.addWidget(widgets[4], 1, 0, 1, 1)
-        layout.addWidget(widgets[5], 1, 1, 1, 1)
-        layout.addWidget(widgets[6], 1, 2, 1, 1)
-        layout.addWidget(widgets[7], 1, 3, 1, 1)
-        layout.addWidget(widgets[8], 2, 0, 1, 1)
-        layout.addWidget(widgets[9], 2, 1, 1, 1)
-        self.assertEqual(layout._find_empty_block(False), (2, 2, 1, 2))
-
-
 class CriticalBlockTestCase(unittest.TestCase):
 
-    #  ┌───────────────────────────┐
-    #  │             0             │
-    #  ├───┬───────────────────┬───┤
-    #  │ 1 │         2         │ 3 │
-    #  ├───┴───┬───┬───┬───┬───┴───┤
-    #  │       │ 5 │   │ 7 │       │
-    #  │   4   ├───┤ 6 ├───┤   8   │
-    #  │       │ 9 │   │10 │       │
-    #  ├───┬───┴───┴───┴───┴───┬───┤
-    #  │11 │        12         │13 │
-    #  ├───┴───────────────────┴───┤
-    #  │            14             │
-    #  └───────────────────────────┘
+    #  ┌───────┬───┬───┬───────┐
+    #  │   0   │ 1 │ 2 │   3   │
+    #  ├───┬───┼───┴───┼───┬───┤
+    #  │░░░│ 4 │   5   │ 6 │░░░│
+    #  ├───┴───┼───┬───┼───┴───┤
+    #  │   7   │ 8 │ 9 │  10   │
+    #  └───────┴───┴───┴───────┘
+
     def setUp(self):
         app = QApplication([])
         self.layout = get_empty_tiling_layout()
-        self.widgets = [QWidget() for _ in range(15)]
-        self.layout.addWidget(self.widgets[0], 0, 0, 1, 7)
-        self.layout.addWidget(self.widgets[1], 1, 0, 1, 1)
-        self.layout.addWidget(self.widgets[2], 1, 1, 1, 5)
-        self.layout.addWidget(self.widgets[3], 1, 6, 1, 1)
-        self.layout.addWidget(self.widgets[4], 2, 0, 2, 2)
-        self.layout.addWidget(self.widgets[5], 2, 2, 1, 1)
-        self.layout.addWidget(self.widgets[6], 2, 3, 2, 1)
-        self.layout.addWidget(self.widgets[7], 2, 4, 1, 1)
-        self.layout.addWidget(self.widgets[8], 2, 5, 2, 2)
-        self.layout.addWidget(self.widgets[9], 3, 2, 1, 1)
-        self.layout.addWidget(self.widgets[10], 3, 4, 1, 1)
-        self.layout.addWidget(self.widgets[11], 4, 0, 1, 1)
-        self.layout.addWidget(self.widgets[12], 4, 1, 1, 5)
-        self.layout.addWidget(self.widgets[13], 4, 6, 1, 1)
-        self.layout.addWidget(self.widgets[14], 5, 0, 1, 7)
+        self.widgets = [Widget(i) for i in range(11)]
+        self.layout.addWidget(self.widgets[0], 0, 0, 1, 2)
+        self.layout.addWidget(self.widgets[1], 0, 2, 1, 1)
+        self.layout.addWidget(self.widgets[2], 0, 3, 1, 1)
+        self.layout.addWidget(self.widgets[3], 0, 4, 1, 2)
+        self.layout.addWidget(self.widgets[4], 1, 1, 1, 1)
+        self.layout.addWidget(self.widgets[5], 1, 2, 1, 2)
+        self.layout.addWidget(self.widgets[6], 1, 4, 1, 1)
+        self.layout.addWidget(self.widgets[7], 2, 0, 1, 2)
+        self.layout.addWidget(self.widgets[8], 2, 2, 1, 1)
+        self.layout.addWidget(self.widgets[9], 2, 3, 1, 1)
+        self.layout.addWidget(self.widgets[10], 2, 4, 1, 2)
 
-    def test_critical_block1(self):
-        self.assertEqual(
-            self.layout._find_critical_block(2, 1, True, True, False),
-            (1, 0, 1, 1)
-        )
-        self.assertEqual(
-            self.layout._find_critical_block(2, 6, True, False, False),
-            (1, 6, 1, 1)
-        )
-        self.assertEqual(
-            self.layout._find_critical_block(4, 1, False, True, False),
-            (4, 0, 1, 1)
-        )
-        self.assertEqual(
-            self.layout._find_critical_block(4, 6, False, False, False),
-            (4, 6, 1, 1)
-        )
+    def test_building_down_right(self):
+        build = CriticalBlock.build_from_point
+        self.assertEqual(build(self.layout, False, 0, 0, False, False),
+                         CriticalBlock(self.layout, False, 0, 0, 1, 2))
+        self.assertEqual(build(self.layout, False, 0, 2, False, False),
+                         CriticalBlock(self.layout, False, 0, 2, 3, 2))
+        with self.assertRaises(PointOutsideGridException):
+            build(self.layout, False, 0, 4, False, False)
+        self.assertEqual(build(self.layout, False, 1, 1, False, False),
+                         CriticalBlock(self.layout, False, 1, 1, 1, 1))
+        self.assertEqual(build(self.layout, False, 1, 2, False, False),
+                         CriticalBlock(self.layout, False, 1, 2, 2, 2))
+        self.assertEqual(build(self.layout, False, 2, 4, False, False),
+                         CriticalBlock(self.layout, False, 2, 4, 1, 2))
 
-    def test_critical_block2(self):
-        self.assertEqual(
-            self.layout._find_critical_block(4, 3, True, True, False),
-            (2, 2, 2, 1)
-        )
-        self.assertEqual(
-            self.layout._find_critical_block(4, 4, True, False, False),
-            (2, 4, 2, 1)
-        )
-        self.assertEqual(
-            self.layout._find_critical_block(2, 3, False, True, False),
-            (2, 2, 2, 1)
-        )
-        self.assertEqual(
-            self.layout._find_critical_block(2, 4, False, False, False),
-            (2, 4, 2, 1)
-        )
+    def test_building_down_left(self):
+        build = CriticalBlock.build_from_point
+        self.assertEqual(build(self.layout, False, 0, 6, False, True),
+                         CriticalBlock(self.layout, False, 0, 4, 1, 2))
+        self.assertEqual(build(self.layout, False, 0, 4, False, True),
+                         CriticalBlock(self.layout, False, 0, 2, 3, 2))
+        with self.assertRaises(PointOutsideGridException):
+            build(self.layout, False, 0, 2, False, True)
+        self.assertEqual(build(self.layout, False, 1, 5, False, True),
+                         CriticalBlock(self.layout, False, 1, 4, 1, 1))
+        self.assertEqual(build(self.layout, False, 1, 4, False, True),
+                         CriticalBlock(self.layout, False, 1, 2, 2, 2))
+        self.assertEqual(build(self.layout, False, 2, 2, False, True),
+                         CriticalBlock(self.layout, False, 2, 0, 1, 2))
 
-    def test_critical_block3(self):
-        self.assertEqual(
-            self.layout._find_critical_block(5, 7, True, True, False),
-            (0, 0, 5, 7)
-        )
-        self.assertEqual(
-            self.layout._find_critical_block(5, 0, True, False, False),
-            (0, 0, 5, 7)
-        )
-        self.assertEqual(
-            self.layout._find_critical_block(1, 7, False, True, False),
-            (1, 0, 5, 7)
-        )
-        self.assertEqual(
-            self.layout._find_critical_block(1, 0, False, False, False),
-            (1, 0, 5, 7)
-        )
+    def test_building_up_right(self):
+        build = CriticalBlock.build_from_point
+        self.assertEqual(build(self.layout, False, 3, 0, True, False),
+                         CriticalBlock(self.layout, False, 2, 0, 1, 2))
+        self.assertEqual(build(self.layout, False, 3, 2, True, False),
+                         CriticalBlock(self.layout, False, 0, 2, 3, 2))
+        with self.assertRaises(PointOutsideGridException):
+            build(self.layout, False, 3, 4, True, False)
+        self.assertEqual(build(self.layout, False, 2, 1, True, False),
+                         CriticalBlock(self.layout, False, 1, 1, 1, 1))
+        self.assertEqual(build(self.layout, False, 3, 2, True, False),
+                         CriticalBlock(self.layout, False, 0, 2, 3, 2))
+        self.assertEqual(build(self.layout, False, 1, 4, True, False),
+                         CriticalBlock(self.layout, False, 0, 4, 1, 2))
 
-
-class CriticalBlockWithEmptySpacesTestCase(unittest.TestCase):
-
-    #  ┌───────────────────┐
-    #  │         0         │
-    #  ├───────┬───┬───────┤
-    #  │░░░░░░░│   │░░░░░░░│
-    #  ├───────┤   ├───────┤
-    #  │       │   │       │
-    #  │   1   │ 2 │   3   │
-    #  │       │   │       │
-    #  ├───────┤   ├───────┤
-    #  │░░░░░░░│   │░░░░░░░│
-    #  ├───────┴───┴───────┤
-    #  │         4         │
-    #  └───────────────────┘
-    def setUp(self):
-        app = QApplication([])
-        self.layout = get_empty_tiling_layout()
-        self.widgets = [QWidget() for _ in range(5)]
-        self.layout.addWidget(self.widgets[0], 0, 0, 1, 5)
-        self.layout.addWidget(self.widgets[1], 2, 0, 2, 2)
-        self.layout.addWidget(self.widgets[2], 1, 2, 4, 1)
-        self.layout.addWidget(self.widgets[3], 2, 3, 2, 2)
-        self.layout.addWidget(self.widgets[4], 5, 0, 1, 5)
-
-    def test_critical_block1(self):
-        self.assertEqual(
-            self.layout._find_critical_block(4, 2, True, True, False),
-            (2, 0, 2, 2)
-        )
-
-    def test_critical_block2(self):
-        self.assertEqual(
-            self.layout._find_critical_block(2, 2, False, True, False),
-            (2, 0, 2, 2)
-        )
-
-    def test_critical_block3(self):
-        self.assertEqual(
-            self.layout._find_critical_block(4, 3, True, False, False),
-            (2, 3, 2, 2)
-        )
-
-    def test_critical_block4(self):
-        self.assertEqual(
-            self.layout._find_critical_block(2, 3, False, False, False),
-            (2, 3, 2, 2)
-        )
-
-
-class IsRectangularTestCase(unittest.TestCase):
-
-    #  ┌───┬───────┐
-    #  │   │   1   │
-    #  │ 0 ├───┬───┤
-    #  │   │ 2 │ 3 │
-    #  ├───┴───┼───┤
-    #  │   4   │ 5 │
-    #  └───────┴───┘
-    def setUp(self):
-        self.app = QApplication([])
-        self.layout = get_empty_tiling_layout()
-        self.ws = [Widget(i) for i in range(6)]
-        self.layout.addWidget(self.ws[0], 0, 0, 2, 1)
-        self.layout.addWidget(self.ws[1], 0, 1, 1, 2)
-        self.layout.addWidget(self.ws[2], 1, 1, 1, 1)
-        self.layout.addWidget(self.ws[3], 1, 2, 1, 1)
-        self.layout.addWidget(self.ws[4], 2, 0, 1, 2)
-        self.layout.addWidget(self.ws[5], 2, 2, 1, 1)
-
-    def test_valid_rectangles(self):
-        self.assertTrue(self.layout._is_rectangular(0, 0, 3, 3, False))
-        self.assertTrue(self.layout._is_rectangular(0, 0, 2, 1, False))
-        self.assertTrue(self.layout._is_rectangular(0, 1, 1, 2, False))
-        self.assertTrue(self.layout._is_rectangular(1, 1, 1, 1, False))
-        self.assertTrue(self.layout._is_rectangular(1, 2, 1, 1, False))
-        self.assertTrue(self.layout._is_rectangular(2, 0, 1, 2, False))
-        self.assertTrue(self.layout._is_rectangular(2, 2, 1, 1, False))
-        self.assertTrue(self.layout._is_rectangular(0, 0, 2, 3, False))
-        self.assertTrue(self.layout._is_rectangular(0, 1, 2, 2, False))
-        self.assertTrue(self.layout._is_rectangular(1, 2, 2, 1, False))
-
-    def test_invalid_rectangles(self):
-        self.assertFalse(self.layout._is_rectangular(0, 0, 4, 4, False))
-        self.assertFalse(self.layout._is_rectangular(0, 0, 2, 2, False))
-        self.assertFalse(self.layout._is_rectangular(1, 0, 2, 2, False))
-        self.assertFalse(self.layout._is_rectangular(1, 1, 2, 2, False))
-        self.assertFalse(self.layout._is_rectangular(0, 0, 3, 2, False))
-        self.assertFalse(self.layout._is_rectangular(0, 1, 3, 2, False))
-        self.assertFalse(self.layout._is_rectangular(1, 0, 2, 3, False))
-
-
-class WidgetsInBlockTestCase(unittest.TestCase):
-
-    #  ┌───┬───────────┐
-    #  │   │     1     │
-    #  │ 0 ├───┬───┬───┤
-    #  │   │ 2 │ 3 │   │
-    #  ├───┴───┼───┤ 4 │
-    #  │   5   │ 6 │   │
-    #  └───────┴───┴───┘
-    def setUp(self):
-        self.app = QApplication([])
-        self.layout = get_empty_tiling_layout()
-        self.ws = [Widget(i) for i in range(7)]
-        self.layout.addWidget(self.ws[0], 0, 0, 2, 1)
-        self.layout.addWidget(self.ws[1], 0, 1, 1, 3)
-        self.layout.addWidget(self.ws[2], 1, 1, 1, 1)
-        self.layout.addWidget(self.ws[3], 1, 2, 1, 1)
-        self.layout.addWidget(self.ws[4], 1, 3, 2, 1)
-        self.layout.addWidget(self.ws[5], 2, 0, 1, 2)
-        self.layout.addWidget(self.ws[6], 2, 2, 1, 1)
-
-    def test_widgets_in_block(self):
-        self.assertEqual(set((w, self.layout._get_item_position(w, False))
-                             for w in self.ws),
-                         set(self.layout._get_widgets_in_block(0, 0, 3, 4,
-                                                               False)))
+    def test_building_up_left(self):
+        build = CriticalBlock.build_from_point
+        self.assertEqual(build(self.layout, False, 3, 6, True, True),
+                         CriticalBlock(self.layout, False, 2, 4, 1, 2))
+        self.assertEqual(build(self.layout, False, 3, 4, True, True),
+                         CriticalBlock(self.layout, False, 0, 2, 3, 2))
+        with self.assertRaises(PointOutsideGridException):
+            build(self.layout, False, 3, 2, True, True)
+        self.assertEqual(build(self.layout, False, 2, 5, True, True),
+                         CriticalBlock(self.layout, False, 1, 4, 1, 1))
+        self.assertEqual(build(self.layout, False, 2, 4, True, True),
+                         CriticalBlock(self.layout, False, 0, 2, 2, 2))
+        self.assertEqual(build(self.layout, False, 1, 2, True, True),
+                         CriticalBlock(self.layout, False, 0, 0, 1, 2))
 
 
 class VirtualBlockTestCase(unittest.TestCase):
@@ -747,27 +353,31 @@ class VirtualBlockTestCase(unittest.TestCase):
         self.layout.addWidget(self.ws[5], 3, 2, 1, 2)
 
     def test_virtualization(self):
-        self.assertEqual(self.layout._virtualize_block(0, 0, 4, 4, False),
-                        [[self.ws[0], self.ws[1], self.ws[1], self.ws[1]],
-                         [self.ws[0], self.ws[2], self.ws[3], self.ws[3]],
-                         [self.ws[4], self.ws[4], self.ws[3], self.ws[3]],
-                         [self.ws[4], self.ws[4], self.ws[5], self.ws[5]]])
+        block = CriticalBlock(self.layout, False, 0, 0, 4, 4)
+        self.assertEqual(block._virtualize(),
+                        [(self.ws[0], self.ws[1], self.ws[1], self.ws[1]),
+                         (self.ws[0], self.ws[2], self.ws[3], self.ws[3]),
+                         (self.ws[4], self.ws[4], self.ws[3], self.ws[3]),
+                         (self.ws[4], self.ws[4], self.ws[5], self.ws[5])])
 
     def test_subset_virtualization(self):
-        self.assertEqual(self.layout._virtualize_block(1, 2, 3, 2, False),
-                        [[self.ws[3], self.ws[3]],
-                         [self.ws[3], self.ws[3]],
-                         [self.ws[5], self.ws[5]]])
+        block = CriticalBlock(self.layout, False, 1, 2, 3, 2)
+        self.assertEqual(block._virtualize(),
+                        [(self.ws[3], self.ws[3]),
+                         (self.ws[3], self.ws[3]),
+                         (self.ws[5], self.ws[5])])
 
     def test_materialization(self):
-        virtual = self.layout._virtualize_block(0, 0, 4, 4, False)
-        self.assertEqual(list(self.layout._materialize_virtual_block(0, 0,
-                                                                     virtual)),
-                         [(w, self.layout._get_item_position(w, False))
-                          for w in self.ws])
+        block = CriticalBlock(self.layout, False, 0, 0, 4, 4)
+        virtual = block._virtualize()
+        self.assertEqual(
+            list(CriticalBlock.materialize_virtual_block(0, 0, virtual)),
+            [(w, self.layout._get_item_position(w, False)) for w in self.ws]
+        )
 
     def test_displaced_materialization(self):
-        virtual = self.layout._virtualize_block(0, 0, 4, 4, False)
+        block = CriticalBlock(self.layout, False, 0, 0, 4, 4)
+        virtual = block._virtualize()
         offset = (1, 2)
         expected = [(w, self.layout._get_item_position(w, False))
                     for w in self.ws]
@@ -775,13 +385,169 @@ class VirtualBlockTestCase(unittest.TestCase):
             widget, pos = expected[i]
             expected[i] = (widget, (pos[0] + offset[0], pos[1] + offset[1],
                                     pos[2], pos[3]))
+        self.assertEqual(
+            list(CriticalBlock.materialize_virtual_block(*offset, virtual)),
+            expected
+        )
+
+    def test_grow(self):
+        block = CriticalBlock(self.layout, False, 0, 0, 4, 4)
+        block.displace_and_resize(0, 4)
+        self.assertEqual(block._virtualize(),
+                        [(self.ws[0], self.ws[1], self.ws[1], self.ws[1]),
+                         (self.ws[0], self.ws[1], self.ws[1], self.ws[1]),
+                         (self.ws[0], self.ws[2], self.ws[3], self.ws[3]),
+                         (self.ws[0], self.ws[2], self.ws[3], self.ws[3]),
+                         (self.ws[4], self.ws[4], self.ws[3], self.ws[3]),
+                         (self.ws[4], self.ws[4], self.ws[3], self.ws[3]),
+                         (self.ws[4], self.ws[4], self.ws[5], self.ws[5]),
+                         (self.ws[4], self.ws[4], self.ws[5], self.ws[5])])
+
+    def test_shrink(self):
+        block = CriticalBlock(self.layout, False, 0, 0, 4, 4)
+        block.displace_and_resize(0, 4)
+        block.displace_and_resize(0, -4)
+        self.assertEqual(block._virtualize(),
+                        [(self.ws[0], self.ws[1], self.ws[1], self.ws[1]),
+                         (self.ws[0], self.ws[2], self.ws[3], self.ws[3]),
+                         (self.ws[4], self.ws[4], self.ws[3], self.ws[3]),
+                         (self.ws[4], self.ws[4], self.ws[5], self.ws[5])])
 
 
-        self.assertEqual(list(self.layout._materialize_virtual_block(*offset,
-                                                                     virtual)),
-                         expected)
+class EmptyBlockTestCase1(unittest.TestCase):
+
+    #  ┌─────────┐
+    #  │░░░░░░░░░│
+    #  │░░░░░░░░░│
+    #  │░░░░░░░░░│
+    #  │░░░░░░░░░│
+    #  │░░░░░░░░░│
+    #  │░░░░░░░░░│
+    #  │░░░░░░░░░│
+    #  └─────────┘
+    def setUp(self):
+        self.app = QApplication([])
+        self.layout = get_empty_tiling_layout()
+        widget = Widget(0)
+        self.layout.addWidget(widget, 0, 0, 4, 3)
+        self.layout.removeWidget(widget)
+
+    def test_down_right(self):
+        empty_block = EmptyBlock.build_from_point(self.layout, False, 0, 0,
+                                                  False, False)
+        self.assertEqual((empty_block.i, empty_block.j, empty_block.rowspan,
+                          empty_block.colspan), (0, 0, 4, 3))
+
+    def test_down_left(self):
+        empty_block = EmptyBlock.build_from_point(self.layout, False, 0, 3,
+                                                  False, True)
+        self.assertEqual((empty_block.i, empty_block.j, empty_block.rowspan,
+                          empty_block.colspan), (0, 0, 4, 3))
+
+    def test_up_right(self):
+        empty_block = EmptyBlock.build_from_point(self.layout, False, 4, 0,
+                                                  True, False)
+        self.assertEqual((empty_block.i, empty_block.j, empty_block.rowspan,
+                          empty_block.colspan), (0, 0, 4, 3))
+
+    def test_up_left(self):
+        empty_block = EmptyBlock.build_from_point(self.layout, False, 4, 3,
+                                                  True, True)
+        self.assertEqual((empty_block.i, empty_block.j, empty_block.rowspan,
+                          empty_block.colspan), (0, 0, 4, 3))
 
 
+class EmptyBlockTestCase2(unittest.TestCase):
+
+    #  ┌─────────┐
+    #  │░░░░░░░░░│
+    #  │░░┌───┐░░│
+    #  │░░│ 0 │░░│
+    #  │░░└───┘░░│
+    #  │░░░░░░░░░│
+    #  └─────────┘
+    def setUp(self):
+        self.app = QApplication([])
+        self.layout = get_empty_tiling_layout()
+        widget = Widget(0)
+        self.layout.addWidget(widget, 0, 0, 3, 3)
+        self.layout.removeWidget(widget)
+        self.layout.addWidget(widget, 1, 1, 1, 1)
+
+    def test_widget_exception(self):
+        with self.assertRaises(WidgetInEmptyBlockException):
+            EmptyBlock.build_from_point(self.layout, False, 0, 0, False, False)
+
+
+class EmptyBlockTestCase3(unittest.TestCase):
+
+    #  ┌───────────────┐
+    #  │       0       │
+    #  ├───┬───────┬───┤
+    #  │   │░░░░░░░│   │
+    #  │ 1 │░░░░░░░│ 2 │
+    #  │   │░░░░░░░│   │
+    #  ├───┴───────┴───┤
+    #  │       3       │
+    #  └───────────────┘
+    def setUp(self):
+        self.app = QApplication([])
+        self.layout = get_empty_tiling_layout()
+        self.ws = [Widget(i) for i in range(4)]
+        self.layout.addWidget(self.ws[0], 0, 0, 1, 4)
+        self.layout.addWidget(self.ws[1], 1, 0, 2, 1)
+        self.layout.addWidget(self.ws[2], 1, 3, 2, 1)
+        self.layout.addWidget(self.ws[3], 3, 0, 1, 4)
+
+    def test_down_right(self):
+        empty_block = EmptyBlock.build_from_point(self.layout, False, 1, 1,
+                                                  False, False)
+        self.assertEqual((empty_block.i, empty_block.j, empty_block.rowspan,
+                          empty_block.colspan), (1, 1, 2, 2))
+
+    def test_down_left(self):
+        empty_block = EmptyBlock.build_from_point(self.layout, False, 1, 3,
+                                                  False, True)
+        self.assertEqual((empty_block.i, empty_block.j, empty_block.rowspan,
+                          empty_block.colspan), (1, 1, 2, 2))
+
+    def test_up_right(self):
+        empty_block = EmptyBlock.build_from_point(self.layout, False, 3, 1,
+                                                  True, False)
+        self.assertEqual((empty_block.i, empty_block.j, empty_block.rowspan,
+                          empty_block.colspan), (1, 1, 2, 2))
+
+    def test_up_left(self):
+        empty_block = EmptyBlock.build_from_point(self.layout, False, 3, 3,
+                                                  True, True)
+        self.assertEqual((empty_block.i, empty_block.j, empty_block.rowspan,
+                          empty_block.colspan), (1, 1, 2, 2))
+
+
+class ShortBlockTestCase(unittest.TestCase):
+
+    #  ┌───┬───┬───┐
+    #  │░░░│░░░│   │
+    #  │░░░├───┤ 2 │
+    #  ├───┤   │   │
+    #  │   │ 1 │   │
+    #  │ 0 │   ├───┤
+    #  │   ├───┤░░░│
+    #  │   │░░░│░░░│
+    #  └───┴───┴───┘
+    def setUp(self):
+        self.app = QApplication([])
+        self.layout = get_empty_tiling_layout()
+        self.ws = [Widget(i) for i in range(3)]
+        self.layout.addWidget(self.ws[0], 2, 0, 3, 1)
+        self.layout.addWidget(self.ws[1], 1, 1, 2, 1)
+        self.layout.addWidget(self.ws[2], 0, 2, 3, 1)
+
+    def test_grow(self):
+        short_block1 = ShortBlock(self.layout, False, 2, 0, 3, 1)
+        short_block1.grow()
+        self.assertEqual(self.layout._get_item_position(self.ws[0], False),
+                         (0, 0, 5, 1))
 
 if __name__ == '__main__':
     unittest.main()
