@@ -352,7 +352,7 @@ class Block:
         done = set()
         row = self.i
         while row < self.i + self.rowspan:
-            col = 0
+            col = self.j
             while col < self.j + self.colspan:
                 item = self.layout._item_at_position(row, col, self.transpose)
                 if item:
