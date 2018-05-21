@@ -131,9 +131,41 @@ class QTilingLayout(QGridLayout):
         block_height = max(offsets)
         block_to_grow= RecBlock(self, transpose, ib.i, ib.j, block_height,
                                 ib.colspan)
-        block_to_grow.displace_and_resize(0, rows - block_height)
-        self._fill_easy_spaces(ib, transpose)
+        self._drop_hanging_widgets(block_to_grow, transpose)
+        # block_to_grow.displace_and_resize(0, rows - block_height)
+        # self._fill_easy_spaces(ib, transpose)
         # self._fill_hard_spaces(ib, transpose)
+
+    def _drop_hanging_widgets(self, domain, transpose):
+        retry = False
+        for widget, pos in domain.get_widgets():
+            has_lateral_space = (
+                pos[1] > domain.j
+                and not self._item_at_position(pos[0], pos[1] - 1, transpose)
+                or pos[1] + pos[3] < domain.j + domain.colspan
+                and not self._item_at_position(pos[0], pos[1] + pos[3],
+                                               transpose)
+            )
+            try:
+                bottom_space = (
+                    None if pos[0] == domain.i + domain.rowspan - 1
+                    else EmptyBlock.build_from_point(self, transpose,
+                                                     pos[0] + 1, pos[1], False,
+                                                     False, colspan=pos[3])
+                )
+            except (WidgetInEmptyBlockException, InvalidBlockException):
+                bottom_space = None
+            if has_lateral_space and bottom_space:
+                surplus = (bottom_space.i + bottom_space.rowspan
+                           - domain.i - domain.rowspan)
+                available_space = bottom_space.rowspan - max(surplus, 0)
+                self.removeWidget(widget)
+                self._add_widget(widget, pos[0] + available_space, *pos[1:],
+                                 transpose)
+                retry = True
+                break
+        if retry:
+            self._drop_hanging_widgets(domain, transpose)
 
     def _fill_easy_spaces(self, domain, transpose):
         eb = EmptyBlock.find_in_block(self, transpose, domain)
@@ -519,19 +551,40 @@ class EmptyBlock(Block):
                 break
 
         if empty_point:
-            # We know where it starts, now find its dimensions
-            rowspan = colspan = 1
-            for i in range(empty_point[0] + 1, domain.i + domain.rowspan):
-                if not layout._item_at_position(i, empty_point[1], transpose):
-                    rowspan += 1
-                else:
-                    break
-            for j in range(empty_point[1] + 1, domain.j + domain.colspan):
-                if not layout._item_at_position(empty_point[0], j, transpose):
-                    colspan += 1
-                else:
-                    break
-            return cls(layout, transpose, *empty_point, rowspan, colspan)
+            return cls.build_from_point(layout, transpose, *empty_point, False,
+                                        False)
         else:
             # No empty blocks
             return None
+
+    @classmethod
+    def build_from_point(cls, layout, transpose, i, j, up, left, colspan=None):
+        item = None
+        rowspan = -1
+        try:
+            while not item:
+                rowspan += 1
+                item = layout._item_at_position(
+                    i + (-rowspan - 1 if up else rowspan),
+                    j - (1 if left else 0),
+                    transpose
+                )
+        except PointOutsideGridException:
+            pass
+
+        item = None
+        if not colspan:
+            colspan = -1
+            try:
+                while not item:
+                    colspan += 1
+                    item = layout._item_at_position(
+                        i - (1 if up else 0),
+                        j + (-colspan - 1 if left else colspan),
+                        transpose
+                    )
+            except PointOutsideGridException:
+                pass
+
+        return cls(layout, transpose, i - (rowspan if up else 0),
+                   j - (colspan if left else 0), rowspan, colspan)
