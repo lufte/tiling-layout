@@ -133,7 +133,7 @@ class QTilingLayout(QGridLayout):
                                 ib.colspan)
         block_to_grow.displace_and_resize(0, rows - block_height)
         self._fill_easy_spaces(ib, transpose)
-        self._fill_hard_spaces(ib, transpose)
+        # self._fill_hard_spaces(ib, transpose)
 
     def _fill_easy_spaces(self, domain, transpose):
         eb = EmptyBlock.find_in_block(self, transpose, domain)
@@ -156,7 +156,7 @@ class QTilingLayout(QGridLayout):
             cb.displace_and_resize(0, eb.rowspan)
             self._fill_easy_spaces(domain, transpose)
 
-    def _fill_easy_spaces(self, domain, transpose):
+    def _fill_hard_spaces(self, domain, transpose):
         raise NotImplementedError
 
     def _get_independent_block(self, widget, transpose):
@@ -535,34 +535,3 @@ class EmptyBlock(Block):
         else:
             # No empty blocks
             return None
-
-    @classmethod
-    def build_from_point(cls, layout, transpose, i, j, up, left):
-        item = None
-        rowspan = -1
-        try:
-            while not item:
-                rowspan += 1
-                item = layout._item_at_position(
-                    i + (-rowspan - 1 if up else rowspan),
-                    j - (1 if left else 0),
-                    transpose
-                )
-        except PointOutsideGridException:
-            pass
-
-        item = None
-        colspan = -1
-        try:
-            while not item:
-                colspan += 1
-                item = layout._item_at_position(
-                    i - (1 if up else 0),
-                    j + (-colspan - 1 if left else colspan),
-                    transpose
-                )
-        except PointOutsideGridException:
-            pass
-
-        return cls(layout, transpose, i - (rowspan if up else 0),
-                   j - (colspan if left else 0), rowspan, colspan)
