@@ -128,44 +128,93 @@ class QTilingLayout(QGridLayout):
             for col in range(old_pos[1], old_pos[1] + old_pos[3]):
                 offsets[col] = row + 1
 
-        block_height = max(offsets)
+        self._drop_hanging_widgets(ib, transpose)
+        block_height = 1 + max(self._get_item_position(w, transpose)[0]
+                               for w, _ in widgets)
         block_to_grow= RecBlock(self, transpose, ib.i, ib.j, block_height,
                                 ib.colspan)
-        # self._drop_hanging_widgets(block_to_grow, transpose)
-        # block_to_grow.displace_and_resize(0, rows - block_height)
-        # self._fill_easy_spaces(ib, transpose)
-        # self._fill_hard_spaces(ib, transpose)
+        block_to_grow.displace_and_resize(0, rows - block_height)
+        self._fill_spaces(ib, transpose)
+
+    def _get_support_widgets(self, widget, transpose):
+        """Returns a set of "support" widgets for the specified widget.
+        A support widget is a widget that is (directly or indirectly) "pushed"
+        by the specified widget when it grows.
+        Args:
+            widget: The widget for which to find supporters.
+            transpose: If True, will behave as if the grid was transposed.
+        """
+        supporters = set()
+        pos = self._get_item_position(widget, transpose)
+        pivot = pos[0] + pos[2]
+        start = pos[1]
+        end = pos[1] + pos[3]
+        upper_limit = self._row_count(transpose)
+        within_limits = (pivot < upper_limit)
+        if within_limits:
+            for index in range(start, end):
+                item = self._item_at_position(pivot, index, transpose)
+                if item:  # this function can be called in the resizing process
+                    supporters.add(item.widget())
+        return supporters.union(*(self._get_support_widgets(w, transpose)
+                                  for w in supporters))
 
     def _drop_hanging_widgets(self, domain, transpose):
         for widget, pos in domain.get_widgets():
-            has_lateral_space = (
-                pos[1] > domain.j
-                and not self._item_at_position(pos[0], pos[1] - 1, transpose)
-                or pos[1] + pos[3] < domain.j + domain.colspan
-                and not self._item_at_position(pos[0], pos[1] + pos[3],
-                                               transpose)
+            left_space = (pos[1] > domain.j and not
+                          self._item_at_position(pos[0], pos[1] - 1,
+                                                 transpose))
+            right_space = (pos[1] + pos[3] < domain.j + domain.colspan and not
+                           self._item_at_position(pos[0], pos[1] + pos[3],
+                                                  transpose))
+            left_height = 1
+            left_fits = False
+            if left_space:
+                for row in range(pos[0] + 1, domain.i + domain.rowspan):
+                    item = self._item_at_position(row, pos[1] - 1, transpose)
+                    if item:
+                        tmp_pos = self._get_item_position(item.widget(),
+                                                          transpose)
+                        left_fits = tmp_pos[1] + tmp_pos[3] == pos[1]
+                        break
+                    else:
+                        left_height += 1
+
+            right_height = 1
+            right_fits = False
+            if right_space:
+                for row in range(pos[0] + 1, domain.i + domain.rowspan):
+                    item = self._item_at_position(row, pos[1] + pos[3],
+                                                  transpose)
+                    if item:
+                        tmp_pos = self._get_item_position(item.widget(),
+                                                          transpose)
+                        right_fits = tmp_pos[1] == pos[1] + pos[3]
+                        break
+                    else:
+                        right_height += 1
+
+            displacement = (
+                min(left_height, right_height) if left_fits and right_fits else
+                left_height if left_fits else
+                right_height if right_fits else
+                0
             )
-            try:
-                if pos[0] == domain.i + domain.rowspan - 1:
-                    bottom_space = None
-                else:
-                    bottom_space = EmptyBlock.build_from_point(self, transpose,
-                                                               pos[0] + 1,
-                                                               pos[1], True)
-                    # TODO: we check that it's the same width, but we know that
-                    # to it's left there could be more empty space that is not
-                    # taken into account because we build our EmptyBlock from
-                    # j=pos[1]
-                    assert bottom_space.colspan == pos[3]
-            except (AssertionError, InvalidBlockException):
-                bottom_space = None
-            if has_lateral_space and bottom_space:
-                surplus = (bottom_space.i + bottom_space.rowspan
-                           - domain.i - domain.rowspan)
-                available_space = bottom_space.rowspan - max(surplus, 0)
+
+            if displacement:
+                widgets = [(widget, pos)]
+                for supporter in self._get_support_widgets(widget, transpose):
+                    widgets.append((supporter,
+                                    self._get_item_position(supporter,
+                                                            transpose)))
+                    self.removeWidget(supporter)
                 self.removeWidget(widget)
-                self._add_widget(widget, pos[0] + available_space, *pos[1:],
-                                 transpose)
+                for supporter, old_pos in widgets:
+                    try:
+                        self._add_widget(supporter, old_pos[0] + displacement,
+                                         *old_pos[1:], transpose)
+                    except:
+                        raise
                 self._drop_hanging_widgets(domain, transpose)
                 return
 
