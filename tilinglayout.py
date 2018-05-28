@@ -131,13 +131,12 @@ class QTilingLayout(QGridLayout):
         block_height = max(offsets)
         block_to_grow= RecBlock(self, transpose, ib.i, ib.j, block_height,
                                 ib.colspan)
-        self._drop_hanging_widgets(block_to_grow, transpose)
+        # self._drop_hanging_widgets(block_to_grow, transpose)
         # block_to_grow.displace_and_resize(0, rows - block_height)
         # self._fill_easy_spaces(ib, transpose)
         # self._fill_hard_spaces(ib, transpose)
 
     def _drop_hanging_widgets(self, domain, transpose):
-        retry = False
         for widget, pos in domain.get_widgets():
             has_lateral_space = (
                 pos[1] > domain.j
@@ -147,13 +146,18 @@ class QTilingLayout(QGridLayout):
                                                transpose)
             )
             try:
-                bottom_space = (
-                    None if pos[0] == domain.i + domain.rowspan - 1
-                    else EmptyBlock.build_from_point(self, transpose,
-                                                     pos[0] + 1, pos[1], False,
-                                                     False, colspan=pos[3])
-                )
-            except (WidgetInEmptyBlockException, InvalidBlockException):
+                if pos[0] == domain.i + domain.rowspan - 1:
+                    bottom_space = None
+                else:
+                    bottom_space = EmptyBlock.build_from_point(self, transpose,
+                                                               pos[0] + 1,
+                                                               pos[1], True)
+                    # TODO: we check that it's the same width, but we know that
+                    # to it's left there could be more empty space that is not
+                    # taken into account because we build our EmptyBlock from
+                    # j=pos[1]
+                    assert bottom_space.colspan == pos[3]
+            except (AssertionError, InvalidBlockException):
                 bottom_space = None
             if has_lateral_space and bottom_space:
                 surplus = (bottom_space.i + bottom_space.rowspan
@@ -162,31 +166,49 @@ class QTilingLayout(QGridLayout):
                 self.removeWidget(widget)
                 self._add_widget(widget, pos[0] + available_space, *pos[1:],
                                  transpose)
-                retry = True
-                break
-        if retry:
-            self._drop_hanging_widgets(domain, transpose)
+                self._drop_hanging_widgets(domain, transpose)
+                return
 
-    def _fill_easy_spaces(self, domain, transpose):
-        eb = EmptyBlock.find_in_block(self, transpose, domain)
+    def _fill_easy_spaces(self, domain, transpose, skip=None):
+        if not skip:
+            skip = set()
 
-        if not eb:
+        long_eb = EmptyBlock.find_in_block(self, transpose, domain, False,
+                                           skip)
+        tall_eb = EmptyBlock.find_in_block(self, transpose, domain, True, skip)
+
+        if not long_eb and not tall_eb:
             return
 
-        # Find a CriticalBlock on top of it with the same width
-        try:
-            cb = CriticalBlock.build_from_point(self, transpose, eb.i,
-                                                eb.j, eb.colspan, True)
-        except (EmptySpaceInCriticalBlockException,
-                ImpossibleToBuildBlockException):
-            # No suitable CriticalBlock, try another EmptyBlock
-            new_domain = RecBlock(self, transpose, eb.i + eb.rowspan, domain.j,
-                                  domain.i + domain.rowspan - eb.i
-                                  - eb.rowspan, domain.colspan)
-            self._fill_easy_spaces(new_domain, transpose)
-        else:
-            cb.displace_and_resize(0, eb.rowspan)
+        # Find a CriticalBlock that can fill either of the empty blocks
+        found = False
+        for up, eb in ((True, long_eb), (False, long_eb),
+                       (True, tall_eb), (False, tall_eb)):
+            try:
+                cb = CriticalBlock.build_from_point(
+                    self,
+                    transpose,
+                    eb.i + (0 if up else eb.rowspan),
+                    eb.j,
+                    eb.colspan,
+                    up
+                )
+            except (EmptySpaceInCriticalBlockException,
+                    ImpossibleToBuildBlockException):
+                continue
+            else:
+                if up:
+                    cb.displace_and_resize(0, eb.rowspan)
+                else:
+                    cb.displace_and_resize(-eb.rowspan, eb.rowspan)
+                found = True
+                break
+        if found:
             self._fill_easy_spaces(domain, transpose)
+        else:
+            # No suitable CriticalBlock, try another EmptyBlock
+            self._fill_easy_spaces(domain, transpose,
+                                   skip | {long_eb, tall_eb})
 
     def _fill_hard_spaces(self, domain, transpose):
         raise NotImplementedError
@@ -282,6 +304,14 @@ class Block:
                 else:
                     col += 1
             row += 1
+
+    def contains_point(self, layout, transpose, i, j):
+        return (self.i <= i < self.i + self.rowspan and
+                self.j <= j < self.j + self.colspan)
+
+    def __hash__(self):
+        return hash((self.layout, self.transpose, self.i, self.j, self.rowspan,
+                     self.colspan))
 
     def __repr__(self):
         return '{}: {}, {}, {}, {}'.format(type(self).__name__, self.i,
@@ -443,8 +473,9 @@ class RecBlock(Block):
         for widget, pos in materialized:
             self.layout.removeWidget(widget)
             self.layout._add_widget(widget, *pos, self.transpose)
-        self.i += displacement
-        self.rowspan += growth
+        # TODO: can't do this if we implement __hash__
+        # self.i += displacement
+        # self.rowspan += growth
 
 
 class EmptySpaceInCriticalBlockException(Exception):
@@ -478,14 +509,14 @@ class CriticalBlock(RecBlock):
         rows = layout._row_count(transpose)
 
         left_rows = set()
-        reached_left_end = False
         row = i - (1 if up else 0)
+        reached_left_end = row < 0 if up else row == rows
         while not reached_left_end:
             item = layout._item_at_position(row, j, transpose)
             if item:
                 pos = layout._get_item_position(item.widget(), transpose)
                 if pos[1] == j:
-                    left_rows.add(pos[0])
+                    left_rows.add(pos[0] + (0 if up else pos[2]))
                     row = pos[0] + (-1 if up else pos[2])
                     reached_left_end = row < 0 if up else row == rows
                 else:
@@ -494,14 +525,14 @@ class CriticalBlock(RecBlock):
                 reached_left_end = True
 
         right_rows = set()
-        reached_right_end = False
         row = i - (1 if up else 0)
+        reached_right_end = row < 0 if up else row == rows
         while not reached_right_end:
             item = layout._item_at_position(row, j + colspan - 1, transpose)
             if item:
                 pos = layout._get_item_position(item.widget(), transpose)
                 if pos[1] + pos[3] == j + colspan:
-                    right_rows.add(pos[0])
+                    right_rows.add(pos[0] + (0 if up else pos[2]))
                     row = pos[0] + (-1 if up else pos[2])
                     reached_right_end = row < 0 if up else row == rows
                 else:
@@ -528,15 +559,21 @@ class WidgetInEmptyBlockException(Exception):
 
 class EmptyBlock(Block):
 
-    def __init__(self, layout, transpose, i, j, rowspan, colspan):
+    def __init__(self, layout, transpose, i, j, rowspan, colspan,
+                 skip_check=False):
         super().__init__(layout, transpose, i, j, rowspan, colspan)
-        for row in range(self.i, self.i + self.rowspan):
-            for col in range(self.j, self.j + self.colspan):
-                if self.layout._item_at_position(row, col, self.transpose):
-                    raise WidgetInEmptyBlockException
+        if not skip_check:
+            for row in range(self.i, self.i + self.rowspan):
+                for col in range(self.j, self.j + self.colspan):
+                    if self.layout._item_at_position(row, col, self.transpose):
+                        raise WidgetInEmptyBlockException
 
     @classmethod
-    def find_in_block(cls, layout, transpose, domain):
+    def find_in_block(cls, layout, transpose, domain, swipe_horizontally,
+                      skip=None):
+        if not skip:
+            skip = set()
+
         positions = (
             (row, col)
             for row in range(domain.i, domain.i + domain.rowspan)
@@ -546,45 +583,73 @@ class EmptyBlock(Block):
         empty_point = None
         for pos in positions:
             item = layout._item_at_position(*pos, transpose)
-            if item is None:
+            if (
+                    item is None
+                    and all(not eb.contains_point(layout, transpose, *pos)
+                            for eb in skip)
+            ):
                 empty_point = pos
                 break
 
         if empty_point:
-            return cls.build_from_point(layout, transpose, *empty_point, False,
-                                        False)
+            return cls.build_from_point(layout, transpose, *empty_point,
+                                        swipe_horizontally)
         else:
             # No empty blocks
             return None
 
     @classmethod
-    def build_from_point(cls, layout, transpose, i, j, up, left, colspan=None):
-        item = None
-        rowspan = -1
-        try:
-            while not item:
-                rowspan += 1
-                item = layout._item_at_position(
-                    i + (-rowspan - 1 if up else rowspan),
-                    j - (1 if left else 0),
-                    transpose
-                )
-        except PointOutsideGridException:
-            pass
-
-        item = None
-        if not colspan:
-            colspan = -1
+    def build_from_point(cls, layout, transpose, i, j, swipe_horizontally):
+        if swipe_horizontally:
+            item = layout._item_at_position(i, j, transpose)
+            rowspan = 0
             try:
                 while not item:
-                    colspan += 1
-                    item = layout._item_at_position(
-                        i - (1 if up else 0),
-                        j + (-colspan - 1 if left else colspan),
-                        transpose
-                    )
+                    rowspan += 1
+                    item = layout._item_at_position(i + rowspan, j, transpose)
             except PointOutsideGridException:
                 pass
 
-        return cls(layout, transpose, i - (rowspan if up else 0),
-                   j - (colspan if left else 0), rowspan, colspan)
+            if not rowspan:
+                raise InvalidBlockException
+
+            try:
+                is_column_empty = True
+                colspan = 0
+                while is_column_empty:
+                    colspan += 1
+                    is_column_empty = all(
+                        layout._item_at_position(tmp_row, j + colspan,
+                                                 transpose) is None
+                        for tmp_row in range(i, i + rowspan)
+                    )
+            except PointOutsideGridException:
+                pass
+        else:
+            item = layout._item_at_position(i, j, transpose)
+            colspan = 0
+            try:
+                while not item:
+                    colspan += 1
+                    item = layout._item_at_position(i, j + colspan, transpose)
+            except PointOutsideGridException:
+                pass
+
+            if not colspan:
+                raise InvalidBlockException
+
+            try:
+                is_row_empty = True
+                rowspan = 0
+                while is_row_empty:
+                    rowspan += 1
+                    is_row_empty = all(
+                        layout._item_at_position(i + rowspan, tmp_col,
+                                                 transpose) is None
+                        for tmp_col in range(j, j + colspan)
+                    )
+            except PointOutsideGridException:
+                pass
+        # TODO: set skip_check=True after we're sure this works
+        return cls(layout, transpose, i, j, rowspan, colspan, skip_check=True)
+
