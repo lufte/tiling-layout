@@ -582,17 +582,20 @@ class CriticalBlock(RecBlock):
 
 
 class WidgetInEmptyBlockException(Exception):
-    pass
+
+    def __init__(self, widget_pos, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.widget_pos = widget_pos
 
 
 class EmptyBlock(Block):
 
     def __init__(self, layout, transpose, i, j, rowspan, colspan):
         super().__init__(layout, transpose, i, j, rowspan, colspan)
-        for row in range(self.i, self.i + self.rowspan):
-            for col in range(self.j, self.j + self.colspan):
+        for col in range(self.j, self.j + self.colspan):
+            for row in range(self.i, self.i + self.rowspan):
                 if self.layout._item_at_position(row, col, self.transpose):
-                    raise WidgetInEmptyBlockException
+                    raise WidgetInEmptyBlockException((row, col))
 
     @classmethod
     def find_in_block(cls, layout, transpose, domain):
@@ -637,16 +640,8 @@ class EmptyBlock(Block):
 
         try:
             return cls(layout, transpose, i, j, rowspan, colspan)
-        except WidgetInEmptyBlockException:
-            # We may have reached an L-shaped empty space, so find a new
-            # colspan starting from the bottom row
-            item = None
-            colspan = -1
-            try:
-                while not item:
-                    colspan += 1
-                    item = layout._item_at_position(i + rowspan - 1,
-                                                    j + colspan, transpose)
-            except PointOutsideGridException:
-                pass
+        except WidgetInEmptyBlockException as e:
+            # We reached an irregular shaped empty space. Try to build the
+            # block using the information from the exception
+            colspan = e.widget_pos[1] - j
             return cls(layout, transpose, i, j, rowspan, colspan)
