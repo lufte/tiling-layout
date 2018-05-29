@@ -610,24 +610,19 @@ class EmptyBlock(Block):
                 break
 
         if empty_point:
-            return cls.build_from_point(layout, transpose, *empty_point, False,
-                                        False)
+            return cls.build_from_point(layout, transpose, *empty_point)
         else:
             # No empty blocks
             return None
 
     @classmethod
-    def build_from_point(cls, layout, transpose, i, j, up, left):
+    def build_from_point(cls, layout, transpose, i, j):
         item = None
         rowspan = -1
         try:
             while not item:
                 rowspan += 1
-                item = layout._item_at_position(
-                    i + (-rowspan - 1 if up else rowspan),
-                    j - (1 if left else 0),
-                    transpose
-                )
+                item = layout._item_at_position(i + rowspan, j, transpose)
         except PointOutsideGridException:
             pass
 
@@ -636,13 +631,22 @@ class EmptyBlock(Block):
         try:
             while not item:
                 colspan += 1
-                item = layout._item_at_position(
-                    i - (1 if up else 0),
-                    j + (-colspan - 1 if left else colspan),
-                    transpose
-                )
+                item = layout._item_at_position(i, j + colspan, transpose)
         except PointOutsideGridException:
             pass
 
-        return cls(layout, transpose, i - (rowspan if up else 0),
-                   j - (colspan if left else 0), rowspan, colspan)
+        try:
+            return cls(layout, transpose, i, j, rowspan, colspan)
+        except WidgetInEmptyBlockException:
+            # We may have reached an L-shaped empty space, so find a new
+            # colspan starting from the bottom row
+            item = None
+            colspan = -1
+            try:
+                while not item:
+                    colspan += 1
+                    item = layout._item_at_position(i + rowspan - 1,
+                                                    j + colspan, transpose)
+            except PointOutsideGridException:
+                pass
+            return cls(layout, transpose, i, j, rowspan, colspan)
