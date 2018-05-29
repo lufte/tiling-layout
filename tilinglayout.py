@@ -117,26 +117,39 @@ class QTilingLayout(QGridLayout):
             widgets.insert(widgets.index((old_widget, old_widget_pos)) + 1,
                            (new_widget, old_widget_pos))
 
-        for widget, old_pos in widgets:
-            self.removeWidget(widget)
-            row = max(offsets[old_pos[1]:old_pos[1] + old_pos[3]])
+        try:
+            for widget, old_pos in widgets:
+                self.removeWidget(widget)
+                row = max(offsets[old_pos[1]:old_pos[1] + old_pos[3]])
 
-            if row >= rows:
-                raise SplitLimitException
+                if row >= rows:
+                    raise SplitLimitException
 
-            self._add_widget(widget, row, old_pos[1], 1, old_pos[3], transpose)
-            for col in range(old_pos[1], old_pos[1] + old_pos[3]):
-                offsets[col] = row + 1
+                self._add_widget(widget, row, old_pos[1], 1, old_pos[3],
+                                 transpose)
+                for col in range(old_pos[1], old_pos[1] + old_pos[3]):
+                    offsets[col] = row + 1
 
-        self._drop_hanging_widgets(ib, transpose)
-        block_height = 1 + max(self._get_item_position(w, transpose)[0]
-                               for w, _ in widgets)
-        block_to_grow= RecBlock(self, transpose, ib.i, ib.j, block_height,
-                                ib.colspan)
-        block_to_grow.displace_and_resize(0, rows - block_height)
-        self._fill_spaces(ib, transpose)
+            self._drop_hanging_widgets(ib, transpose)
+            block_height = 1 + max(self._get_item_position(w, transpose)[0]
+                                   for w, _ in widgets)
+            block_to_grow= RecBlock(self, transpose, ib.i, ib.j, block_height,
+                                    ib.colspan)
+            block_to_grow.displace_and_resize(0, rows - block_height)
+            self._fill_spaces(ib, transpose)
+        except:
+            # Print positions before raising the exception
+            print('Positions:')
+            for widget, pos in widgets:
+                if widget is not new_widget:
+                    print('    ', pos)
+            print('Exception raised while splitting {} item at {}'.format(
+                'vertically' if transpose else 'horizontally',
+                old_widget_pos
+            ))
+            raise
 
-    def _get_support_widgets(self, widget, transpose):
+    def _get_supporters(self, widget, transpose):
         """Returns a set of "support" widgets for the specified widget.
         A support widget is a widget that is (directly or indirectly) "pushed"
         by the specified widget when it grows.
@@ -156,7 +169,7 @@ class QTilingLayout(QGridLayout):
                 item = self._item_at_position(pivot, index, transpose)
                 if item:  # this function can be called in the resizing process
                     supporters.add(item.widget())
-        return supporters.union(*(self._get_support_widgets(w, transpose)
+        return supporters.union(*(self._get_supporters(w, transpose)
                                   for w in supporters))
 
     def _drop_hanging_widgets(self, domain, transpose):
@@ -203,20 +216,23 @@ class QTilingLayout(QGridLayout):
 
             if displacement:
                 widgets = [(widget, pos)]
-                for supporter in self._get_support_widgets(widget, transpose):
-                    widgets.append((supporter,
-                                    self._get_item_position(supporter,
-                                                            transpose)))
-                    self.removeWidget(supporter)
-                self.removeWidget(widget)
-                for supporter, old_pos in widgets:
-                    try:
+                max_row = pos[0]
+                for supporter in self._get_supporters(widget, transpose):
+                    supporter_pos = self._get_item_position(supporter,
+                                                            transpose)
+                    widgets.append((supporter, supporter_pos))
+                    max_row = max(max_row, supporter_pos[0])
+
+                if max_row + displacement < self._row_count(transpose):
+                    for supporter, old_pos in widgets:
+                        self.removeWidget(supporter)
+                        # We are adding a widget before removing its
+                        # supporters. This could cause overlap between widgets
+                        # until the whole loop it's over.
                         self._add_widget(supporter, old_pos[0] + displacement,
                                          *old_pos[1:], transpose)
-                    except:
-                        raise
-                self._drop_hanging_widgets(domain, transpose)
-                return
+                    self._drop_hanging_widgets(domain, transpose)
+                    return
 
     def _fill_spaces(self, domain, transpose):
         eb = EmptyBlock.find_in_block(self, transpose, domain)
@@ -325,10 +341,6 @@ class Block:
     def contains_point(self, layout, transpose, i, j):
         return (self.i <= i < self.i + self.rowspan and
                 self.j <= j < self.j + self.colspan)
-
-    def __hash__(self):
-        return hash((self.layout, self.transpose, self.i, self.j, self.rowspan,
-                     self.colspan))
 
     def __repr__(self):
         return '{}: {}, {}, {}, {}'.format(type(self).__name__, self.i,
@@ -490,9 +502,8 @@ class RecBlock(Block):
         for widget, pos in materialized:
             self.layout.removeWidget(widget)
             self.layout._add_widget(widget, *pos, self.transpose)
-        # TODO: can't do this if we implement __hash__
-        # self.i += displacement
-        # self.rowspan += growth
+        self.i += displacement
+        self.rowspan += growth
 
 
 class EmptySpaceInCriticalBlockException(Exception):
