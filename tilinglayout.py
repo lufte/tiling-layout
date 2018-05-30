@@ -17,11 +17,12 @@ class QTilingLayout(QGridLayout):
 
     def __init__(self, widget, *args, max_span=12, **kwargs):
         super().__init__(*args, **kwargs)
-        self.max_span = max_span
-        self._add_widget(widget, 0, 0, self.max_span, self.max_span, False)
+        self._max_span = max_span
+        self._add_widget(widget, 0, 0, self._max_span, self._max_span, False)
 
     def _is_point_inside_grid(self, row, col):
-        return 0 <= row < self.max_span and 0 <= col < self.max_span
+        """Determines if the point is inside the layout."""
+        return 0 <= row < self._max_span and 0 <= col < self._max_span
 
     def _add_widget(self, widget, row, col, rowspan, colspan, transpose):
         """Invokes QGridLayout.addWidget on a possibly transposed grid.
@@ -97,12 +98,38 @@ class QTilingLayout(QGridLayout):
             return self.columnCount()
 
     def hsplit(self, old_widget, new_widget, put_before=False):
+        """Splits the specified widget horizontally.
+
+        Args:
+            old_widget: The widget to split.
+            new_widget: The widget to insert in the new space.
+            put_before: If True, the new widget will be inserted on top of the
+                        old widget.
+        """
+
         self._split(old_widget, new_widget, put_before, False)
 
     def vsplit(self, old_widget, new_widget, put_before=False):
+        """Splits the specified widget vertically.
+
+        Args:
+            old_widget: The widget to split.
+            new_widget: The widget to insert in the new space.
+            put_before: If True, the new widget will be inserted to the left of
+                        the old widget.
+        """
         self._split(old_widget, new_widget, put_before, True)
 
     def _split(self, old_widget, new_widget, put_before, transpose):
+        """Splits the specified widget.
+
+        Args:
+            old_widget: The widget to split.
+            new_widget: The widget to insert in the new space.
+            put_before: If True, the new widget will be inserted on top the
+                        old widget.
+            transpose: If True, will behave as if the grid was transposed.
+        """
         rows = self._row_count(transpose)
         old_widget_pos = self._get_item_position(old_widget, transpose)
         ib = self._get_independent_block(old_widget, transpose)
@@ -147,30 +174,75 @@ class QTilingLayout(QGridLayout):
             ))
             raise
 
-    def _get_supporters(self, widget, transpose):
-        """Returns a set of "support" widgets for the specified widget.
-        A support widget is a widget that is (directly or indirectly) "pushed"
-        by the specified widget when it grows.
+    def _get_independent_block(self, widget, transpose):
+        """Return the independent block for the specified widget.
+
+        An indenpendent block is a CriticalBlock that doesn't share widgets to
+        the CriticalBlock to its right nor the CriticalBlock to its left.
+
         Args:
-            widget: The widget for which to find supporters.
+            widget: Find the independent block that contains this widget.
             transpose: If True, will behave as if the grid was transposed.
         """
-        supporters = set()
         pos = self._get_item_position(widget, transpose)
-        pivot = pos[0] + pos[2]
-        start = pos[1]
-        end = pos[1] + pos[3]
-        upper_limit = self._row_count(transpose)
-        within_limits = (pivot < upper_limit)
-        if within_limits:
-            for index in range(start, end):
-                item = self._item_at_position(pivot, index, transpose)
-                if item:  # this function can be called in the resizing process
-                    supporters.add(item.widget())
-        return supporters.union(*(self._get_supporters(w, transpose)
-                                  for w in supporters))
+        rows = self._row_count(transpose)
+
+        left = pos[1]
+        found_left_limit = False
+        while not found_left_limit:
+            height = 0
+            reached_end = False
+            while not reached_end:
+                tmp_widget = self._item_at_position(height, left,
+                                                    transpose).widget()
+                tmp_pos = self._get_item_position(tmp_widget, transpose)
+                if tmp_pos[1] == left:
+                    height += tmp_pos[2]
+                reached_end = tmp_pos[1] != left or height == rows
+            if height == rows:
+                found_left_limit = True
+            else:
+                tmp_left_widget = self._item_at_position(tmp_pos[0], left - 1,
+                                                         transpose).widget()
+                left = self._get_item_position(tmp_left_widget, transpose)[1]
+
+        right = pos[1] + pos[3]
+        found_right_limit = False
+        while not found_right_limit:
+            height = 0
+            reached_end = False
+            while not reached_end:
+                tmp_widget = self._item_at_position(height, right - 1,
+                                                    transpose).widget()
+                tmp_pos = self._get_item_position(tmp_widget, transpose)
+                if tmp_pos[1] + tmp_pos[3] == right:
+                    height += tmp_pos[2]
+                reached_end = (tmp_pos[1] + tmp_pos[3] != right
+                               or height == rows)
+            if height == rows:
+                found_right_limit = True
+            else:
+                tmp_right_widget = self._item_at_position(tmp_pos[0], right,
+                                                          transpose).widget()
+                tmp_right_widget_pos = self._get_item_position(
+                    tmp_right_widget,
+                    transpose
+                )
+                right = tmp_right_widget_pos[1] + tmp_right_widget_pos[3]
+
+        return CriticalBlock(self, transpose, 0, left, rows, right - left)
 
     def _drop_hanging_widgets(self, domain, transpose):
+        """Move widgets with lateral space down until that space is filled.
+
+        A hanging widget is a widget with lateral space (to their left or
+        their right) which, if moved down, can fill that space with another
+        widget.
+
+        Args:
+            domain: A Block in which hanging widgets will be searched.
+            transpose: If True, will behave as if the grid was transposed.
+        """
         for widget, pos in domain.get_widgets():
             left_space = (pos[1] > domain.j and not
                           self._item_at_position(pos[0], pos[1] - 1,
@@ -232,7 +304,38 @@ class QTilingLayout(QGridLayout):
                     self._drop_hanging_widgets(domain, transpose)
                     return
 
+    def _get_supporters(self, widget, transpose):
+        """Returns a set of "support" widgets for the specified widget.
+
+        A support widget is a widget that is (directly or indirectly) "pushed"
+        by the specified widget when it grows.
+
+        Args:
+            widget: The widget for which to find supporters.
+            transpose: If True, will behave as if the grid was transposed.
+        """
+        supporters = set()
+        pos = self._get_item_position(widget, transpose)
+        pivot = pos[0] + pos[2]
+        start = pos[1]
+        end = pos[1] + pos[3]
+        upper_limit = self._row_count(transpose)
+        within_limits = (pivot < upper_limit)
+        if within_limits:
+            for index in range(start, end):
+                item = self._item_at_position(pivot, index, transpose)
+                if item:  # this function can be called in the resizing process
+                    supporters.add(item.widget())
+        return supporters.union(*(self._get_supporters(w, transpose)
+                                  for w in supporters))
+
     def _fill_spaces(self, domain, transpose):
+        """Search EmptyBlocks inside domain and fill them.
+
+        Args:
+            domain: A Block in which empty spaces will be searched.
+            transpose: If True, will behave as if the grid was transposed.
+        """
         eb = EmptyBlock.find_in_block(self, transpose, domain)
 
         if not eb:
@@ -244,57 +347,9 @@ class QTilingLayout(QGridLayout):
         cb.displace_and_resize(0, eb.rowspan)
         self._fill_spaces(domain, transpose)
 
-    def _get_independent_block(self, widget, transpose):
-        pos = self._get_item_position(widget, transpose)
-        rows = self._row_count(transpose)
-
-        left = pos[1]
-        found_left_limit = False
-        while not found_left_limit:
-            height = 0
-            reached_end = False
-            while not reached_end:
-                tmp_widget = self._item_at_position(height, left,
-                                                    transpose).widget()
-                tmp_pos = self._get_item_position(tmp_widget, transpose)
-                if tmp_pos[1] == left:
-                    height += tmp_pos[2]
-                reached_end = tmp_pos[1] != left or height == rows
-            if height == rows:
-                found_left_limit = True
-            else:
-                tmp_left_widget = self._item_at_position(tmp_pos[0], left - 1,
-                                                         transpose).widget()
-                left = self._get_item_position(tmp_left_widget, transpose)[1]
-
-        right = pos[1] + pos[3]
-        found_right_limit = False
-        while not found_right_limit:
-            height = 0
-            reached_end = False
-            while not reached_end:
-                tmp_widget = self._item_at_position(height, right - 1,
-                                                    transpose).widget()
-                tmp_pos = self._get_item_position(tmp_widget, transpose)
-                if tmp_pos[1] + tmp_pos[3] == right:
-                    height += tmp_pos[2]
-                reached_end = (tmp_pos[1] + tmp_pos[3] != right
-                               or height == rows)
-            if height == rows:
-                found_right_limit = True
-            else:
-                tmp_right_widget = self._item_at_position(tmp_pos[0], right,
-                                                          transpose).widget()
-                tmp_right_widget_pos = self._get_item_position(
-                    tmp_right_widget,
-                    transpose
-                )
-                right = tmp_right_widget_pos[1] + tmp_right_widget_pos[3]
-
-        return CriticalBlock(self, transpose, 0, left, rows, right - left)
-
 
 class InvalidBlockException(Exception):
+    """Raised if a Block has no area or doesn't fit in the layout."""
     pass
 
 
