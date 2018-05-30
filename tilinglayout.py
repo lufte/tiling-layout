@@ -15,15 +15,13 @@ class PointOutsideGridException(Exception):
 
 class QTilingLayout(QGridLayout):
 
-    def __init__(self, widget, *args, max_span=60, **kwargs):
+    def __init__(self, widget, *args, max_span=12, **kwargs):
         super().__init__(*args, **kwargs)
         self.max_span = max_span
         self._add_widget(widget, 0, 0, self.max_span, self.max_span, False)
 
     def _is_point_inside_grid(self, row, col):
-        # return 0 <= row < self.max_span and 0 <= col < self.max_span
-        # TODO: fix tests to use the previous line
-        return 0 <= row < self.rowCount() and 0 <= col < self.columnCount()
+        return 0 <= row < self.max_span and 0 <= col < self.max_span
 
     def _add_widget(self, widget, row, col, rowspan, colspan, transpose):
         """Invokes QGridLayout.addWidget on a possibly transposed grid.
@@ -613,30 +611,25 @@ class EmptyBlock(Block):
                 break
 
         if empty_point:
-            return cls.build_from_point(layout, transpose, *empty_point)
+            return cls.build_from_point(layout, transpose, domain,
+                                        *empty_point)
         else:
             # No empty blocks
             return None
 
     @classmethod
-    def build_from_point(cls, layout, transpose, i, j):
-        item = None
-        rowspan = -1
-        try:
-            while not item:
-                rowspan += 1
-                item = layout._item_at_position(i + rowspan, j, transpose)
-        except PointOutsideGridException:
-            pass
+    def build_from_point(cls, layout, transpose, domain, i, j):
+        rowspan = colspan = 0
 
-        item = None
-        colspan = -1
-        try:
-            while not item:
-                colspan += 1
-                item = layout._item_at_position(i, j + colspan, transpose)
-        except PointOutsideGridException:
-            pass
+        for rowspan in range(0, domain.i + domain.rowspan - i):
+            if layout._item_at_position(i + rowspan, j, transpose):
+                break
+            rowspan += 1
+
+        for colspan in range(0, domain.j + domain.colspan - j):
+            if layout._item_at_position(i, j + colspan, transpose):
+                break
+            colspan += 1
 
         try:
             return cls(layout, transpose, i, j, rowspan, colspan)
