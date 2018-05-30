@@ -211,10 +211,16 @@ class QTilingLayout(QGridLayout):
             self._restore_state(original_state)
             raise
         except Exception as e:
-            original_positions = [t[1] for t in original_state]
+            original_positions = []
+            pos_index = -1
+            for widget, pos in original_state:
+                original_positions.append(pos)
+                if widget is old_widget:
+                    pos_index = len(original_positions) - 1
+
             raise SplitException(
                 original_positions,
-                original_positions.index(old_widget_pos),
+                pos_index,
                 'vsplit' if transpose else 'hsplit'
             ) from e
 
