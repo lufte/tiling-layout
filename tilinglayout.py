@@ -93,6 +93,19 @@ class QTilingLayout(QGridLayout):
         else:
             return self.columnCount()
 
+    def delete_widget(self, widget):
+        """Removes a widget from the layout and fills the remaining space"""
+
+        self.removeWidget(widget)
+        widget.hide()
+        try:
+            self._fill_spaces(Block(self, False, 0, 0, self._max_span,
+                              self._max_span), False)
+        except:
+            # TODO: restore the previous state
+            self._fill_spaces(Block(self, True, 0, 0, self._max_span,
+                              self._max_span), True)
+
     def hsplit(self, old_widget, new_widget, put_before=False):
         """Splits the specified widget horizontally.
 
@@ -171,7 +184,7 @@ class QTilingLayout(QGridLayout):
             raise
 
     def _get_independent_block(self, widget, transpose):
-        """Return the independent block for the specified widget.
+        """Returns the independent block for the specified widget.
 
         An indenpendent block is a CriticalBlock that doesn't share widgets to
         the CriticalBlock to its right nor the CriticalBlock to its left.
@@ -229,7 +242,7 @@ class QTilingLayout(QGridLayout):
         return CriticalBlock(self, transpose, 0, left, rows, right - left)
 
     def _drop_hanging_widgets(self, domain, transpose):
-        """Move widgets with lateral space down until that space is filled.
+        """Moves widgets with lateral space down until that space is filled.
 
         A hanging widget is a widget with lateral space (to their left or
         their right) which, if moved down, can fill that space with another
@@ -326,7 +339,7 @@ class QTilingLayout(QGridLayout):
                                   for w in supporters))
 
     def _fill_spaces(self, domain, transpose):
-        """Search EmptyBlocks inside domain and fill them.
+        """Searches EmptyBlocks inside domain and fills them.
 
         Args:
             domain: A Block in which empty spaces will be searched.
