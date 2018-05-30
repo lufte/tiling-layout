@@ -9,6 +9,32 @@ class PointOutsideGridException(Exception):
     pass
 
 
+class SplitException(Exception):
+    """Generic unexpected exception with useful debug information"""
+
+    def __init__(self, positions, pos_index, operation):
+        """Creates a new SplitException
+
+        Args:
+            positions: List of positions of all the widgets in the layout
+                       before the failed operation was executed.
+            pos_index: Index of the position of the affected widget in the
+                       previous list.
+            operation: 'vsplit', 'hsplit' or 'delete'
+        """
+        valid_operations = ('vsplit', 'hsplit', 'delete')
+        if operation not in valid_operations:
+            raise ValueError('"operation" must be one of '
+                             '{}'.format(valid_operations))
+        super().__init__('Exception raised when performing a "{}" operation '
+                         'of the widget positioned at {}.\nPositions:\n'
+                         '{}'.format(operation, positions[pos_index],
+                                     '\n'.join(str(p) for p in positions)))
+        self.positions = positions
+        self.pos_index = pos_index
+        self.operation = operation
+
+
 class QTilingLayout(QGridLayout):
 
     def __init__(self, widget, *args, max_span=12, **kwargs):
@@ -93,18 +119,27 @@ class QTilingLayout(QGridLayout):
         else:
             return self.columnCount()
 
+    def _get_state(self):
+        """Returns every widget in the layout along with its position"""
+
+        return [(self.itemAt(i).widget(), self.getItemPosition(i))
+                for i in range(self.count())]
+
+    def _restore_state(self, prev_state):
+        item = self.itemAt(0)
+        while item:
+            widget = item.widget()
+            self.removeWidget(widget)
+            widget.hide()
+            item = self.itemAt(0)
+        for widget, pos in prev_state:
+            widget.show()
+            self.addWidget(widget, *pos)
+
     def delete_widget(self, widget):
         """Removes a widget from the layout and fills the remaining space"""
 
-        self.removeWidget(widget)
-        widget.hide()
-        try:
-            self._fill_spaces(Block(self, False, 0, 0, self._max_span,
-                              self._max_span), False)
-        except:
-            # TODO: restore the previous state
-            self._fill_spaces(Block(self, True, 0, 0, self._max_span,
-                              self._max_span), True)
+        raise NotImplentedError
 
     def hsplit(self, old_widget, new_widget, put_before=False):
         """Splits the specified widget horizontally.
@@ -139,6 +174,7 @@ class QTilingLayout(QGridLayout):
                         old widget.
             transpose: If True, will behave as if the grid was transposed.
         """
+        original_state = self._get_state()
         rows = self._row_count(transpose)
         old_widget_pos = self._get_item_position(old_widget, transpose)
         ib = self._get_independent_block(old_widget, transpose)
@@ -171,17 +207,17 @@ class QTilingLayout(QGridLayout):
                                     ib.colspan)
             block_to_grow.displace_and_resize(0, rows - block_height)
             self._fill_spaces(ib, transpose)
-        except:
-            # Print positions before raising the exception
-            print('Positions:')
-            for widget, pos in widgets:
-                if widget is not new_widget:
-                    print('    ', pos)
-            print('Exception raised while splitting {} item at {}'.format(
-                'vertically' if transpose else 'horizontally',
-                old_widget_pos
-            ))
+        except SplitLimitException:
+            self._restore_state(original_state)
             raise
+        except Exception as e:
+            original_positions = [t[1] for t in original_state]
+            raise SplitException(
+                original_positions,
+                original_positions.index(old_widget_pos),
+                'vsplit' if transpose else 'hsplit'
+            ) from e
+
 
     def _get_independent_block(self, widget, transpose):
         """Returns the independent block for the specified widget.
