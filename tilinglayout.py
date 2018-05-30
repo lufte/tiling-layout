@@ -1,8 +1,4 @@
 from PyQt5.QtWidgets import QGridLayout, QWidget
-from functools import reduce
-from math import gcd as gcd_
-import itertools
-import pdb
 
 
 class SplitLimitException(Exception):
