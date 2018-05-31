@@ -8,9 +8,6 @@ class SplitLimitException(Exception):
 class PointOutsideGridException(Exception):
     pass
 
-class WidgetOverlapException(Exception):
-    pass
-
 
 class SplitException(Exception):
     """Generic unexpected exception with useful debug information"""
@@ -60,11 +57,6 @@ class QTilingLayout(QGridLayout):
             colspan: Same as in QGridLayout.addWidget.
             transpose: If True, will behave as if the grid was transposed.
         """
-        try:
-            EmptyBlock(self, transpose, row, col, rowspan, colspan)
-        except WidgetInEmptyBlockException:
-            raise WidgetOverlapException from None
-
         if not transpose:
             if not self._is_point_inside_grid(row, col):
                 raise PointOutsideGridException
@@ -320,20 +312,24 @@ class QTilingLayout(QGridLayout):
             )
 
             if displacement:
-                widgets = [(widget, pos)]
-                max_row = pos[0]
-                for supporter in self._get_supporters(widget, transpose):
-                    supporter_pos = self._get_item_position(supporter,
-                                                            transpose)
-                    widgets.append((supporter, supporter_pos))
-                    max_row = max(max_row, supporter_pos[0])
+                can_drop = True
+                try:
+                    widgets = [(widget, pos)]
+                    EmptyBlock(self, transpose, pos[0] + displacement,
+                               *pos[1:])
+                    for supporter in self._get_supporters(widget, transpose):
+                        supporter_pos = self._get_item_position(supporter,
+                                                                transpose)
+                        EmptyBlock(self, transpose,
+                                   supporter_pos[0] + displacement,
+                                   *supporter_pos[1:])
+                        widgets.append((supporter, supporter_pos))
+                except WidgetInEmptyBlockException:
+                    can_drop = False
 
-                if max_row + displacement < self.max_span:
+                if can_drop:
                     for supporter, old_pos in widgets:
                         self.removeWidget(supporter)
-                        # We are adding a widget before removing its
-                        # supporters. This could cause overlap between widgets
-                        # until the whole loop it's over.
                         self._add_widget(supporter, old_pos[0] + displacement,
                                          *old_pos[1:], transpose)
                     self._drop_hanging_widgets(domain, transpose)
