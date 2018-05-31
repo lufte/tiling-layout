@@ -8,6 +8,9 @@ class SplitLimitException(Exception):
 class PointOutsideGridException(Exception):
     pass
 
+class WidgetOverlapException(Exception):
+    pass
+
 
 class SplitException(Exception):
     """Generic unexpected exception with useful debug information"""
@@ -40,7 +43,7 @@ class QTilingLayout(QGridLayout):
     def __init__(self, widget, *args, max_span=12, **kwargs):
         super().__init__(*args, **kwargs)
         self._max_span = max_span
-        self._add_widget(widget, 0, 0, self._max_span, self._max_span, False)
+        self.addWidget(widget, 0, 0, self._max_span, self._max_span)
 
     def _is_point_inside_grid(self, row, col):
         """Determines if the point is inside the layout."""
@@ -57,6 +60,11 @@ class QTilingLayout(QGridLayout):
             colspan: Same as in QGridLayout.addWidget.
             transpose: If True, will behave as if the grid was transposed.
         """
+        try:
+            EmptyBlock(self, transpose, row, col, rowspan, colspan)
+        except WidgetInEmptyBlockException:
+            raise WidgetOverlapException
+
         if not transpose:
             if not self._is_point_inside_grid(row, col):
                 raise PointOutsideGridException
