@@ -175,19 +175,18 @@ class QTilingLayout(QGridLayout):
             transpose: If True, will behave as if the grid was transposed.
         """
         original_state = self._get_state()
-        rows = self._row_count(transpose)
-        old_widget_pos = self._get_item_position(old_widget, transpose)
-        ib = self._get_independent_block(old_widget, transpose)
-        offsets = [0] * self._column_count(transpose)
-        widgets = list(ib.get_widgets())
-        if put_before:
-            widgets.insert(widgets.index((old_widget, old_widget_pos)),
-                           (new_widget, old_widget_pos))
-        else:
-            widgets.insert(widgets.index((old_widget, old_widget_pos)) + 1,
-                           (new_widget, old_widget_pos))
-
         try:
+            rows = self._row_count(transpose)
+            old_widget_pos = self._get_item_position(old_widget, transpose)
+            ib = self._get_independent_block(old_widget, transpose)
+            offsets = [0] * self._column_count(transpose)
+            widgets = list(ib.get_widgets())
+            if put_before:
+                widgets.insert(widgets.index((old_widget, old_widget_pos)),
+                               (new_widget, old_widget_pos))
+            else:
+                widgets.insert(widgets.index((old_widget, old_widget_pos)) + 1,
+                               (new_widget, old_widget_pos))
             for widget, old_pos in widgets:
                 self.removeWidget(widget)
                 row = max(offsets[old_pos[1]:old_pos[1] + old_pos[3]])
@@ -393,9 +392,34 @@ class QTilingLayout(QGridLayout):
             return
 
         # Find a CriticalBlock that can fill the EmptyBlock
-        cb = CriticalBlock.build_from_point(self, transpose, eb.i, eb.j,
-                                            eb.colspan, True)
-        cb.displace_and_resize(0, eb.rowspan)
+        try:
+            cb = CriticalBlock.build_from_point(self, transpose, eb.i, eb.j,
+                                                eb.colspan, True)
+        except ImpossibleToBuildBlockException:
+            left_neighbour = right_neighbour = None
+            if eb.j > domain.j:
+                left_neighbour = self._item_at_position(eb.i, eb.j - 1,
+                                                        transpose).widget()
+            if eb.j + eb.colspan < domain.j + domain.colspan:
+                right_neighbour = self._item_at_position(eb.i,
+                                                         eb.j + eb.colspan,
+                                                         transpose).widget()
+
+            if not left_neighbour and not right_neighbour:
+                raise ImpossibleToBuildBlockException
+
+            if left_neighbour:
+                pos = self._get_item_position(left_neighbour, transpose)
+                self.removeWidget(left_neighbour)
+                self._add_widget(left_neighbour, *pos[:3], pos[3] + eb.colspan,
+                                 transpose)
+            else:
+                pos = self._get_item_position(right_neighbour, transpose)
+                self.removeWidget(right_neighbour)
+                self._add_widget(right_neighbour, pos[0], pos[1] - eb.colspan,
+                                 pos[2], pos[3] + eb.colspan, transpose)
+        else:
+            cb.displace_and_resize(0, eb.rowspan)
         self._fill_spaces(domain, transpose)
 
 
@@ -696,8 +720,8 @@ class EmptyBlock(Block):
 
     def __init__(self, layout, transpose, i, j, rowspan, colspan):
         super().__init__(layout, transpose, i, j, rowspan, colspan)
-        for col in range(self.j, self.j + self.colspan):
-            for row in range(self.i, self.i + self.rowspan):
+        for row in range(self.i, self.i + self.rowspan):
+            for col in range(self.j, self.j + self.colspan):
                 if self.layout._item_at_position(row, col, self.transpose):
                     raise WidgetInEmptyBlockException((row, col))
 
@@ -742,5 +766,5 @@ class EmptyBlock(Block):
         except WidgetInEmptyBlockException as e:
             # We reached an irregular shaped empty space. Try to build the
             # block using the information from the exception
-            colspan = e.widget_pos[1] - j
+            rowspan = e.widget_pos[0] - i
             return cls(layout, transpose, i, j, rowspan, colspan)
