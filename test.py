@@ -3,7 +3,7 @@
 import sys
 import os
 import unittest
-import time
+import random
 from unittest.mock import Mock, patch
 from PyQt5.QtWidgets import QWidget, QApplication
 
@@ -27,24 +27,24 @@ class Widget(QWidget):
         return 'Widget: {}'.format(self.name)
 
 
-@unittest.skip('With max_span>3 takes an undefined amount of hours to finish')
-class CombinatoryTestCase(unittest.TestCase):
+@unittest.skipUnless('RandomSplitsTestCase' in sys.argv,
+                     'Only run if explicitly called')
+class RandomSplitsTestCase(unittest.TestCase):
 
     def setUp(self):
         self.app = QApplication([])
-        self.max_span = 4
+        self.max_span = 9
         self.initial_positions = [(0, 0, *[self.max_span]*2)]
         self.widgets = [Widget(i) for i in range(self.max_span**2)]
         self.new_widget = Widget('new')
+        self.trace = []
 
-    def test_h(self):
-        self._split(self.max_span, self.initial_positions, 0, True)
-
-    def test_v(self):
-        self._split(self.max_span, self.initial_positions, 0, False)
+    def test(self):
+        self._split(self.max_span, self.initial_positions, 0,
+                    random.randint(0, 1))
 
     def _split(self, max_span, positions, widget_to_split, split_horizontally):
-        # time.sleep(1)
+        self.trace.append((positions[widget_to_split], split_horizontally))
         layout = QTilingLayout(self.widgets[0], max_span=max_span)
         layout.removeWidget(self.widgets[0])
         for i in range(len(positions)):
@@ -54,24 +54,17 @@ class CombinatoryTestCase(unittest.TestCase):
                 layout.hsplit(self.widgets[widget_to_split], self.new_widget)
             else:
                 layout.vsplit(self.widgets[widget_to_split], self.new_widget)
-        except:
-            # Something went wrong
-            print('Spliting item {} at:'.format('horizontally' if
-                                                split_horizontally
-                                                else 'vertically'),
-                  positions[widget_to_split])
-            print('Positions:')
-            for pos in positions:
-                print(pos)
-            print('---------------------------------------------')
+        except SplitLimitException:
+            return
+        except Exception as e:
+            for entry in self.trace:
+                print(entry)
+            raise e
         new_positions = [layout.getItemPosition(i)
                          for i in range(layout.count())]
-        del layout
-        for i in range(len(new_positions)):
-            if new_positions[i][2] > 1:
-                self._split(max_span, new_positions, i, True)
-            if new_positions[i][3] > 1:
-                self._split(max_span, new_positions, i, False)
+        self._split(max_span, new_positions,
+                    random.randrange(len(new_positions)),
+                    random.randint(0, 1))
 
 
 def get_empty_tiling_layout(max_span):
@@ -118,18 +111,6 @@ class TransposedMethodsTestCase(unittest.TestCase):
             (2, 1, 2, 3)
         )
         self.layout.removeWidget(widget)
-
-    def test_row_count(self):
-        self.assertEqual(self.layout._row_count(False),
-                         self.layout.rowCount())
-        self.assertEqual(self.layout._row_count(True),
-                         self.layout.columnCount())
-
-    def test_column_count(self):
-        self.assertEqual(self.layout._column_count(False),
-                         self.layout.columnCount())
-        self.assertEqual(self.layout._column_count(True),
-                         self.layout.rowCount())
 
     def test_item_at_position(self):
         for i in range(self.layout.rowCount()):
@@ -388,11 +369,11 @@ class EmptyBlockTestCase(unittest.TestCase):
         self.assertEqual(
             EmptyBlock.find_in_block(self.layout, False,
                                      RecBlock(self.layout, False, 0, 0, 5, 5)),
-            EmptyBlock(self.layout, False, 1, 1, 4, 1)
+            EmptyBlock(self.layout, False, 1, 1, 1, 3)
         )
         self.assertEqual(
             EmptyBlock.find_in_block(self.layout, False,
-                                     Block(self.layout, False, 1, 1, 2, 4)),
+                                     Block(self.layout, False, 1, 1, 3, 2)),
             EmptyBlock(self.layout, False, 1, 1, 2, 2)
         )
 
