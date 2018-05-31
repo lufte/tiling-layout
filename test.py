@@ -104,6 +104,8 @@ class TransposedMethodsTestCase(unittest.TestCase):
             (1, 2, 3, 2)
         )
         self.layout.removeWidget(widget)
+        self.layout.removeWidget(self.widgets[2])
+        self.layout.removeWidget(self.widgets[4])
 
         self.layout._add_widget(widget, 1, 2, 3, 2, True)
         self.assertEqual(
