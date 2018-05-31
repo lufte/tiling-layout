@@ -42,12 +42,12 @@ class QTilingLayout(QGridLayout):
 
     def __init__(self, widget, *args, max_span=12, **kwargs):
         super().__init__(*args, **kwargs)
-        self._max_span = max_span
-        self.addWidget(widget, 0, 0, self._max_span, self._max_span)
+        self.max_span = max_span
+        self.addWidget(widget, 0, 0, self.max_span, self.max_span)
 
     def _is_point_inside_grid(self, row, col):
         """Determines if the point is inside the layout."""
-        return 0 <= row < self._max_span and 0 <= col < self._max_span
+        return 0 <= row < self.max_span and 0 <= col < self.max_span
 
     def _add_widget(self, widget, row, col, rowspan, colspan, transpose):
         """Invokes QGridLayout.addWidget on a possibly transposed grid.
@@ -63,7 +63,7 @@ class QTilingLayout(QGridLayout):
         try:
             EmptyBlock(self, transpose, row, col, rowspan, colspan)
         except WidgetInEmptyBlockException:
-            raise WidgetOverlapException
+            raise WidgetOverlapException from None
 
         if not transpose:
             if not self._is_point_inside_grid(row, col):
@@ -73,17 +73,6 @@ class QTilingLayout(QGridLayout):
             if not self._is_point_inside_grid(col, row):
                 raise PointOutsideGridException
             return self.addWidget(widget, col, row, colspan, rowspan)
-
-    def _column_count(self, transpose):
-        """Invokes QGridLayout.columnCount on a possibly transposed grid.
-
-        Args:
-            transpose: If True, will behave as if the grid was transposed.
-        """
-        if not transpose:
-            return self.columnCount()
-        else:
-            return self.rowCount()
 
     def _get_item_position(self, widget, transpose):
         """Invokes QGridLayout.getItemPosition on a possibly transposed grid.
@@ -115,17 +104,6 @@ class QTilingLayout(QGridLayout):
             if not self._is_point_inside_grid(col, row):
                 raise PointOutsideGridException
             return self.itemAtPosition(col, row)
-
-    def _row_count(self, transpose):
-        """Invokes QGridLayout.rowCount on a possibly transposed grid.
-
-        Args:
-            transpose: If True, will behave as if the grid was transposed.
-        """
-        if not transpose:
-            return self.rowCount()
-        else:
-            return self.columnCount()
 
     def _get_state(self):
         """Returns every widget in the layout along with its position"""
@@ -184,10 +162,9 @@ class QTilingLayout(QGridLayout):
         """
         original_state = self._get_state()
         try:
-            rows = self._row_count(transpose)
             old_widget_pos = self._get_item_position(old_widget, transpose)
             ib = self._get_independent_block(old_widget, transpose)
-            offsets = [0] * self._column_count(transpose)
+            offsets = [0] * self.max_span
             widgets = list(ib.get_widgets())
             if put_before:
                 widgets.insert(widgets.index((old_widget, old_widget_pos)),
@@ -199,7 +176,7 @@ class QTilingLayout(QGridLayout):
                 self.removeWidget(widget)
                 row = max(offsets[old_pos[1]:old_pos[1] + old_pos[3]])
 
-                if row >= rows:
+                if row >= self.max_span:
                     raise SplitLimitException
 
                 self._add_widget(widget, row, old_pos[1], 1, old_pos[3],
@@ -212,7 +189,7 @@ class QTilingLayout(QGridLayout):
                                    for w, _ in widgets)
             block_to_grow= RecBlock(self, transpose, ib.i, ib.j, block_height,
                                     ib.colspan)
-            block_to_grow.displace_and_resize(0, rows - block_height)
+            block_to_grow.displace_and_resize(0, self.max_span - block_height)
             self._fill_spaces(ib, transpose)
         except SplitLimitException:
             self._restore_state(original_state)
@@ -243,7 +220,6 @@ class QTilingLayout(QGridLayout):
             transpose: If True, will behave as if the grid was transposed.
         """
         pos = self._get_item_position(widget, transpose)
-        rows = self._row_count(transpose)
 
         left = pos[1]
         found_left_limit = False
@@ -256,8 +232,8 @@ class QTilingLayout(QGridLayout):
                 tmp_pos = self._get_item_position(tmp_widget, transpose)
                 if tmp_pos[1] == left:
                     height += tmp_pos[2]
-                reached_end = tmp_pos[1] != left or height == rows
-            if height == rows:
+                reached_end = tmp_pos[1] != left or height == self.max_span
+            if height == self.max_span:
                 found_left_limit = True
             else:
                 tmp_left_widget = self._item_at_position(tmp_pos[0], left - 1,
@@ -276,8 +252,8 @@ class QTilingLayout(QGridLayout):
                 if tmp_pos[1] + tmp_pos[3] == right:
                     height += tmp_pos[2]
                 reached_end = (tmp_pos[1] + tmp_pos[3] != right
-                               or height == rows)
-            if height == rows:
+                               or height == self.max_span)
+            if height == self.max_span:
                 found_right_limit = True
             else:
                 tmp_right_widget = self._item_at_position(tmp_pos[0], right,
@@ -288,7 +264,8 @@ class QTilingLayout(QGridLayout):
                 )
                 right = tmp_right_widget_pos[1] + tmp_right_widget_pos[3]
 
-        return CriticalBlock(self, transpose, 0, left, rows, right - left)
+        return CriticalBlock(self, transpose, 0, left, self.max_span,
+                             right - left)
 
     def _drop_hanging_widgets(self, domain, transpose):
         """Moves widgets with lateral space down until that space is filled.
@@ -351,7 +328,7 @@ class QTilingLayout(QGridLayout):
                     widgets.append((supporter, supporter_pos))
                     max_row = max(max_row, supporter_pos[0])
 
-                if max_row + displacement < self._row_count(transpose):
+                if max_row + displacement < self.max_span:
                     for supporter, old_pos in widgets:
                         self.removeWidget(supporter)
                         # We are adding a widget before removing its
@@ -377,8 +354,7 @@ class QTilingLayout(QGridLayout):
         pivot = pos[0] + pos[2]
         start = pos[1]
         end = pos[1] + pos[3]
-        upper_limit = self._row_count(transpose)
-        within_limits = (pivot < upper_limit)
+        within_limits = (pivot < self.max_span)
         if within_limits:
             for index in range(start, end):
                 item = self._item_at_position(pivot, index, transpose)
@@ -441,10 +417,10 @@ class Block:
     def __init__(self, layout, transpose, i, j, rowspan, colspan):
         if not (
                 i >= 0 and j >= 0 and rowspan > 0 and colspan > 0
-                and 0 <= i < layout._row_count(transpose)
-                and 0 <= j < layout._column_count(transpose)
-                and 0 < i + rowspan <= layout._row_count(transpose)
-                and 0 < j + colspan <= layout._column_count(transpose)
+                and 0 <= i < layout.max_span
+                and 0 <= j < layout.max_span
+                and 0 < i + rowspan <= layout.max_span
+                and 0 < j + colspan <= layout.max_span
         ):
             raise InvalidBlockException
         self.layout = layout
@@ -670,11 +646,9 @@ class CriticalBlock(RecBlock):
 
     @classmethod
     def build_from_point(cls, layout, transpose, i, j, colspan, up):
-        rows = layout._row_count(transpose)
-
         left_rows = set()
         row = i - (1 if up else 0)
-        reached_left_end = row < 0 if up else row == rows
+        reached_left_end = row < 0 if up else row == layout.max_span
         while not reached_left_end:
             item = layout._item_at_position(row, j, transpose)
             if item:
@@ -682,7 +656,8 @@ class CriticalBlock(RecBlock):
                 if pos[1] == j:
                     left_rows.add(pos[0] + (0 if up else pos[2]))
                     row = pos[0] + (-1 if up else pos[2])
-                    reached_left_end = row < 0 if up else row == rows
+                    reached_left_end = (row < 0 if up
+                                        else row == layout.max_span)
                 else:
                     reached_left_end = True
             else:
@@ -690,7 +665,7 @@ class CriticalBlock(RecBlock):
 
         right_rows = set()
         row = i - (1 if up else 0)
-        reached_right_end = row < 0 if up else row == rows
+        reached_right_end = row < 0 if up else row == layout.max_span
         while not reached_right_end:
             item = layout._item_at_position(row, j + colspan - 1, transpose)
             if item:
@@ -698,7 +673,8 @@ class CriticalBlock(RecBlock):
                 if pos[1] + pos[3] == j + colspan:
                     right_rows.add(pos[0] + (0 if up else pos[2]))
                     row = pos[0] + (-1 if up else pos[2])
-                    reached_right_end = row < 0 if up else row == rows
+                    reached_right_end = (row < 0 if up
+                                         else row == layout.max_span)
                 else:
                     reached_right_end = True
             else:
