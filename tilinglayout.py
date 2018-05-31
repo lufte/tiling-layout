@@ -8,6 +8,9 @@ class SplitLimitException(Exception):
 class PointOutsideGridException(Exception):
     pass
 
+class WidgetOverlapException(Exception):
+    pass
+
 
 class SplitException(Exception):
     """Generic unexpected exception with useful debug information"""
@@ -57,6 +60,11 @@ class QTilingLayout(QGridLayout):
             colspan: Same as in QGridLayout.addWidget.
             transpose: If True, will behave as if the grid was transposed.
         """
+        try:
+            EmptyBlock(self, transpose, row, col, rowspan, colspan)
+        except (WidgetInEmptyBlockException, InvalidBlockException):
+            raise WidgetOverlapException from None
+
         if not transpose:
             if not self._is_point_inside_grid(row, col):
                 raise PointOutsideGridException
@@ -158,6 +166,8 @@ class QTilingLayout(QGridLayout):
             ib = self._get_independent_block(old_widget, transpose)
             offsets = [0] * self.max_span
             widgets = list(ib.get_widgets())
+            for widget, _ in widgets:
+                self.removeWidget(widget)
             if put_before:
                 widgets.insert(widgets.index((old_widget, old_widget_pos)),
                                (new_widget, old_widget_pos))
@@ -165,7 +175,6 @@ class QTilingLayout(QGridLayout):
                 widgets.insert(widgets.index((old_widget, old_widget_pos)) + 1,
                                (new_widget, old_widget_pos))
             for widget, old_pos in widgets:
-                self.removeWidget(widget)
                 row = max(offsets[old_pos[1]:old_pos[1] + old_pos[3]])
 
                 if row >= self.max_span:
@@ -199,7 +208,6 @@ class QTilingLayout(QGridLayout):
                 pos_index,
                 'vsplit' if transpose else 'hsplit'
             ) from e
-
 
     def _get_independent_block(self, widget, transpose):
         """Returns the independent block for the specified widget.
@@ -312,20 +320,24 @@ class QTilingLayout(QGridLayout):
             )
 
             if displacement:
+                widgets = [(widget, pos)]
+                for supporter in self._get_supporters(widget, transpose):
+                    supporter_pos = self._get_item_position(supporter,
+                                                            transpose)
+                    widgets.append((supporter, supporter_pos))
+                    self.removeWidget(supporter)
+                self.removeWidget(widget)
+
+                # TODO: We are removing all the supporters and then checking if
+                # we can drop them. It would be nice to check that before
+                # removing anything
                 can_drop = True
-                try:
-                    widgets = [(widget, pos)]
-                    EmptyBlock(self, transpose, pos[0] + displacement,
-                               *pos[1:])
-                    for supporter in self._get_supporters(widget, transpose):
-                        supporter_pos = self._get_item_position(supporter,
-                                                                transpose)
-                        EmptyBlock(self, transpose,
-                                   supporter_pos[0] + displacement,
-                                   *supporter_pos[1:])
-                        widgets.append((supporter, supporter_pos))
-                except (WidgetInEmptyBlockException, InvalidBlockException):
-                    can_drop = False
+                for supporter, old_pos in widgets:
+                    try:
+                        EmptyBlock(self, transpose, old_pos[0] + displacement,
+                                   *old_pos[1:])
+                    except (WidgetInEmptyBlockException, InvalidBlockException):
+                        can_drop = False
 
                 if can_drop:
                     for supporter, old_pos in widgets:
@@ -334,6 +346,13 @@ class QTilingLayout(QGridLayout):
                                          *old_pos[1:], transpose)
                     self._drop_hanging_widgets(domain, transpose)
                     return
+                else:
+                    # Leave everything as it was before
+                    for supporter, _ in widgets:
+                        self.removeWidget(supporter)
+                    for supporter, old_pos in widgets:
+                        self._add_widget(supporter, *old_pos, transpose)
+
 
     def _get_supporters(self, widget, transpose):
         """Returns a set of "support" widgets for the specified widget.
@@ -376,28 +395,32 @@ class QTilingLayout(QGridLayout):
             cb = CriticalBlock.build_from_point(self, transpose, eb.i, eb.j,
                                                 eb.colspan, True)
         except ImpossibleToBuildBlockException:
-            left_neighbour = right_neighbour = None
+            left_w = right_w = left_w_pos = right_w_pos = None
             if eb.j > domain.j:
-                left_neighbour = self._item_at_position(eb.i, eb.j - 1,
-                                                        transpose).widget()
+                left_w = self._item_at_position(eb.i, eb.j - 1,
+                                                transpose).widget()
+                left_w_pos = self._get_item_position(left_w, transpose)
+                if left_w_pos[0] != eb.i or left_w_pos[2] > eb.rowspan:
+                    left_w = None
             if eb.j + eb.colspan < domain.j + domain.colspan:
-                right_neighbour = self._item_at_position(eb.i,
-                                                         eb.j + eb.colspan,
-                                                         transpose).widget()
+                right_w = self._item_at_position(eb.i, eb.j + eb.colspan,
+                                                 transpose).widget()
+                right_w_pos = self._get_item_position(right_w, transpose)
+                if right_w_pos[0] != eb.i or right_w_pos[2] > eb.rowspan:
+                    right_w = None
 
-            if not left_neighbour and not right_neighbour:
+            if not left_w and not right_w:
                 raise ImpossibleToBuildBlockException
 
-            if left_neighbour:
-                pos = self._get_item_position(left_neighbour, transpose)
-                self.removeWidget(left_neighbour)
-                self._add_widget(left_neighbour, *pos[:3], pos[3] + eb.colspan,
-                                 transpose)
+            if left_w:
+                self.removeWidget(left_w)
+                self._add_widget(left_w, *left_w_pos[:3],
+                                 left_w_pos[3] + eb.colspan, transpose)
             else:
-                pos = self._get_item_position(right_neighbour, transpose)
-                self.removeWidget(right_neighbour)
-                self._add_widget(right_neighbour, pos[0], pos[1] - eb.colspan,
-                                 pos[2], pos[3] + eb.colspan, transpose)
+                self.removeWidget(right_w)
+                self._add_widget(right_w, right_w_pos[0],
+                                 right_w_pos[1] - eb.colspan, right_w_pos[2],
+                                 right_w_pos[3] + eb.colspan, transpose)
         else:
             cb.displace_and_resize(0, eb.rowspan)
         self._fill_spaces(domain, transpose)
@@ -607,8 +630,9 @@ class RecBlock(Block):
 
         materialized = self.materialize_virtual_block(self.i + displacement,
                                                       self.j, virtual_block)
-        for widget, pos in materialized:
+        for widget, _ in materialized:
             self.layout.removeWidget(widget)
+        for widget, pos in materialized:
             self.layout._add_widget(widget, *pos, self.transpose)
         self.i += displacement
         self.rowspan += growth
