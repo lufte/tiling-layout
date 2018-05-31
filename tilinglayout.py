@@ -324,7 +324,7 @@ class QTilingLayout(QGridLayout):
                                    supporter_pos[0] + displacement,
                                    *supporter_pos[1:])
                         widgets.append((supporter, supporter_pos))
-                except WidgetInEmptyBlockException:
+                except (WidgetInEmptyBlockException, InvalidBlockException):
                     can_drop = False
 
                 if can_drop:
