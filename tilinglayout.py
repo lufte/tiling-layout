@@ -66,12 +66,8 @@ class QTilingLayout(QGridLayout):
             raise WidgetOverlapException from None
 
         if not transpose:
-            if not self._is_point_inside_grid(row, col):
-                raise PointOutsideGridException
             return self.addWidget(widget, row, col, rowspan, colspan)
         else:
-            if not self._is_point_inside_grid(col, row):
-                raise PointOutsideGridException
             return self.addWidget(widget, col, row, colspan, rowspan)
 
     def _get_item_position(self, widget, transpose):
