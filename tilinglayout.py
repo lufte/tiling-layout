@@ -380,7 +380,7 @@ class QTilingLayout(QGridLayout):
             domain: A Block in which empty spaces will be searched.
             transpose: If True, will behave as if the grid was transposed.
         """
-        eb = EmptyBlock.find_in_block(self, transpose, domain)
+        eb = EmptyBlock.find_in_block(domain)
 
         if not eb:
             return
@@ -725,7 +725,7 @@ class EmptyBlock(Block):
                     raise WidgetInEmptyBlockException((row, col))
 
     @classmethod
-    def find_in_block(cls, layout, transpose, domain):
+    def find_in_block(cls, domain):
         positions = (
             (row, col)
             for row in range(domain.i, domain.i + domain.rowspan)
@@ -734,20 +734,21 @@ class EmptyBlock(Block):
 
         empty_point = None
         for pos in positions:
-            item = layout._item_at_position(*pos, transpose)
+            item = domain.layout._item_at_position(*pos, domain.transpose)
             if item is None:
                 empty_point = pos
                 break
 
         if empty_point:
-            return cls.build_from_point(layout, transpose, domain,
-                                        *empty_point)
+            return cls.build_from_point(domain, *empty_point)
         else:
             # No empty blocks
             return None
 
     @classmethod
-    def build_from_point(cls, layout, transpose, domain, i, j):
+    def build_from_point(cls, domain, i, j):
+        layout = domain.layout
+        transpose = domain.transpose
         rowspan = colspan = 0
 
         for rowspan in range(0, domain.i + domain.rowspan - i):
