@@ -212,8 +212,8 @@ class QTilingLayout(QGridLayout):
     def _get_independent_block(self, widget, transpose):
         """Returns the independent block for the specified widget.
 
-        An indenpendent block is a CriticalBlock that doesn't share widgets to
-        the CriticalBlock to its right nor the CriticalBlock to its left.
+        An indenpendent block is a CriticalBlock of the same height as the
+        layout.
 
         Args:
             widget: Find the independent block that contains this widget.
