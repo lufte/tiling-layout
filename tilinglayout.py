@@ -427,6 +427,7 @@ class InvalidBlockException(Exception):
 
 
 class Block:
+    """A rectangular area inside a layout"""
 
     def __init__(self, layout, transpose, i, j, rowspan, colspan):
         if not (
@@ -443,30 +444,6 @@ class Block:
         self.j = j
         self.rowspan = rowspan
         self.colspan = colspan
-
-    def get_widgets(self):
-        #TODO: find a way to avoid looping over every row
-        done = set()
-        row = self.i
-        while row < self.i + self.rowspan:
-            col = self.j
-            while col < self.j + self.colspan:
-                item = self.layout._item_at_position(row, col, self.transpose)
-                if item:
-                    widget = item.widget()
-                    pos = self.layout._get_item_position(widget,
-                                                         self.transpose)
-                    if widget not in done:
-                        yield widget, pos
-                        done.add(widget)
-                    col += pos[3]
-                else:
-                    col += 1
-            row += 1
-
-    def contains_point(self, layout, transpose, i, j):
-        return (self.i <= i < self.i + self.rowspan and
-                self.j <= j < self.j + self.colspan)
 
     def __repr__(self):
         return '{}: {}, {}, {}, {}'.format(type(self).__name__, self.i,
@@ -549,6 +526,27 @@ class RecBlock(Block):
                   for col in range(self.j, self.j + self.colspan))
             for row in range(self.i, self.i + self.rowspan)
         ]
+
+    def get_widgets(self):
+        """Returns all widgets contained in this RecBlock"""
+        #TODO: find a way to avoid looping over every row
+        done = set()
+        row = self.i
+        while row < self.i + self.rowspan:
+            col = self.j
+            while col < self.j + self.colspan:
+                item = self.layout._item_at_position(row, col, self.transpose)
+                if item:
+                    widget = item.widget()
+                    pos = self.layout._get_item_position(widget,
+                                                         self.transpose)
+                    if widget not in done:
+                        yield widget, pos
+                        done.add(widget)
+                    col += pos[3]
+                else:
+                    col += 1
+            row += 1
 
     @staticmethod
     def materialize_virtual_block(i, j, virtual_block):
