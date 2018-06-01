@@ -203,6 +203,7 @@ class StateTestCase(unittest.TestCase):
         )
 
 
+@unittest.skip('Until we finish coverage')
 class SplitsTestCase(unittest.TestCase):
 
     #  ┌───────┐
@@ -457,38 +458,44 @@ class VirtualBlockTestCase(unittest.TestCase):
 
 class EmptyBlockTestCase(unittest.TestCase):
 
-    #  ┌───────────────────┐
-    #  │         0         │
-    #  ├───┬───────────┬───┤
-    #  │   │░░░░░░░░░░░│   │
-    #  │   │░░░░░░░┌───┤   │
-    #  │   │░░░░░░░│ 3 │   │
-    #  │ 1 │░░░┌───┼───┤ 2 │
-    #  │   │░░░│ 4 │ 5 │   │
-    #  │   │░░░└───┴───┤   │
-    #  │   │░░░░░░░░░░░│   │
-    #  └───┴───────────┴───┘
+    #  ┌───────────────────┬───┐
+    #  │         0         │   │
+    #  ├───┬───────────┬───┤   │
+    #  │   │░░░░░░░░░░░│   │   │
+    #  │   │░░░░░░░┌───┤   │   │
+    #  │   │░░░░░░░│ 3 │   │ 6 │
+    #  │ 1 │░░░┌───┼───┤ 2 │   │
+    #  │   │░░░│ 4 │ 5 │   │   │
+    #  │   │░░░└───┴───┤   │   │
+    #  │   │░░░░░░░░░░░│   │   │
+    #  ├───┴───────────┴───┴───┤
+    #  │           7           │
+    #  └───────────────────────┘
     def setUp(self):
         self.app = QApplication([])
-        self.layout = get_empty_tiling_layout(5)
-        self.ws = [Widget(i) for i in range(6)]
+        self.layout = get_empty_tiling_layout(6)
+        self.ws = [Widget(i) for i in range(8)]
         self.layout.addWidget(self.ws[0], 0, 0, 1, 5)
         self.layout.addWidget(self.ws[1], 1, 0, 4, 1)
         self.layout.addWidget(self.ws[2], 1, 4, 4, 1)
         self.layout.addWidget(self.ws[3], 2, 3, 1, 1)
         self.layout.addWidget(self.ws[4], 3, 2, 1, 1)
         self.layout.addWidget(self.ws[5], 3, 3, 1, 1)
+        self.layout.addWidget(self.ws[6], 0, 5, 5, 1)
+        self.layout.addWidget(self.ws[7], 5, 0, 1, 6)
 
     def test_find(self):
         self.assertEqual(
-            EmptyBlock.find_in_block(self.layout, False,
-                                     RecBlock(self.layout, False, 0, 0, 5, 5)),
+            EmptyBlock.find_in_block(RecBlock(self.layout, False, 0, 0, 5, 5)),
             EmptyBlock(self.layout, False, 1, 1, 1, 3)
         )
         self.assertEqual(
-            EmptyBlock.find_in_block(self.layout, False,
-                                     Block(self.layout, False, 1, 1, 3, 2)),
+            EmptyBlock.find_in_block(Block(self.layout, False, 1, 1, 3, 2)),
             EmptyBlock(self.layout, False, 1, 1, 2, 2)
+        )
+        self.assertEqual(
+            EmptyBlock.find_in_block(Block(self.layout, False, 3, 1, 3, 3)),
+            EmptyBlock(self.layout, False, 3, 1, 2, 1)
         )
 
     def test_bad_block(self):
@@ -496,6 +503,9 @@ class EmptyBlockTestCase(unittest.TestCase):
             EmptyBlock(self.layout, False, 1, 1, 2, 3)
         self.assertEqual(cm.exception.widget_pos, (2, 3))
 
+    def test_no_block(self):
+        self.assertIsNone(EmptyBlock.find_in_block(Block(self.layout, False,
+                                                         0, 0, 1, 5)))
 
-if __name__ == '__main__':
-    unittest.main()
+
+if __name__ == '__main__': unittest.main()
