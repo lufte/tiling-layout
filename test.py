@@ -12,7 +12,9 @@ from tilinglayout import (QTilingLayout, EmptyBlock, SplitLimitException,
                           WidgetInEmptyBlockException, CriticalBlock, RecBlock,
                           EmptySpaceInCriticalBlockException, Block,
                           PointOutsideGridException, WidgetOverlapException,
-                          InvalidBlockException)
+                          InvalidBlockException,
+                          ImpossibleToBuildBlockException,
+                          NonRectangularRecBlockException)
 
 
 class Widget(QWidget):
@@ -349,15 +351,15 @@ class SupportersTestCase(unittest.TestCase):
                          set())
 
 
-class VirtualBlockTestCase(unittest.TestCase):
+class RecBlockTestCase(unittest.TestCase):
 
     #  ┌───────┬───────────────────────┐
     #  │       │                       │
     #  │       │            1          │
     #  │   0   │                       │
-    #  │       ├───────┬───────────────┤
-    #  │       │   2   │               │
-    #  ├───────┴───────┤               │
+    #  │       ├───┬───┬───────────────┤
+    #  │       │ 2 │░░░│               │
+    #  ├───────┴───┴───┤               │
     #  │               │               │
     #  │               │       3       │
     #  │               │               │
@@ -374,18 +376,44 @@ class VirtualBlockTestCase(unittest.TestCase):
         self.ws = [Widget(i) for i in range(6)]
         self.layout.addWidget(self.ws[0], 0, 0, 3, 2)
         self.layout.addWidget(self.ws[1], 0, 2, 2, 6)
-        self.layout.addWidget(self.ws[2], 2, 2, 1, 2)
+        self.layout.addWidget(self.ws[2], 2, 2, 1, 1)
         self.layout.addWidget(self.ws[3], 2, 4, 4, 4)
         self.layout.addWidget(self.ws[4], 3, 0, 5, 4)
         self.layout.addWidget(self.ws[5], 6, 4, 2, 4)
 
+    def test_valid_block(self):
+        p =(0, 0, 8, 8)
+        block = RecBlock(self.layout, False, *p)
+        self.assertEqual((block.i, block.j, block.rowspan, block.colspan), p)
+
+    def test_non_rectangular_blocks(self):
+        with self.assertRaises(NonRectangularRecBlockException):
+            RecBlock(self.layout, False, 2, 0, 6, 8)
+        with self.assertRaises(NonRectangularRecBlockException):
+            RecBlock(self.layout, False, 0, 0, 3, 3)
+        with self.assertRaises(NonRectangularRecBlockException):
+            RecBlock(self.layout, False, 0, 2, 3, 6)
+        with self.assertRaises(NonRectangularRecBlockException):
+            RecBlock(self.layout, False, 2, 3, 4, 5)
+
+    def test_get_widgets(self):
+        self.assertEqual(
+            list(RecBlock(self.layout, False, 0, 0, 8, 8).get_widgets()),
+            [(self.ws[0], (0, 0, 3, 2)),
+             (self.ws[1], (0, 2, 2, 6)),
+             (self.ws[2], (2, 2, 1, 1)),
+             (self.ws[3], (2, 4, 4, 4)),
+             (self.ws[4], (3, 0, 5, 4)),
+             (self.ws[5], (6, 4, 2, 4))]
+        )
+
     def test_virtualization(self):
-        block = CriticalBlock(self.layout, False, 0, 0, 8, 8)
+        block = RecBlock(self.layout, False, 0, 0, 8, 8)
         l = self.ws
         self.assertEqual(block._virtualize(),
                          [(l[0], l[0], l[1], l[1], l[1], l[1], l[1], l[1]),
                           (l[0], l[0], l[1], l[1], l[1], l[1], l[1], l[1]),
-                          (l[0], l[0], l[2], l[2], l[3], l[3], l[3], l[3]),
+                          (l[0], l[0], l[2], None, l[3], l[3], l[3], l[3]),
                           (l[4], l[4], l[4], l[4], l[3], l[3], l[3], l[3]),
                           (l[4], l[4], l[4], l[4], l[3], l[3], l[3], l[3]),
                           (l[4], l[4], l[4], l[4], l[3], l[3], l[3], l[3]),
@@ -393,7 +421,7 @@ class VirtualBlockTestCase(unittest.TestCase):
                           (l[4], l[4], l[4], l[4], l[5], l[5], l[5], l[5])])
 
     def test_subset_virtualization(self):
-        block = CriticalBlock(self.layout, False, 2, 4, 6, 4)
+        block = RecBlock(self.layout, False, 2, 4, 6, 4)
         self.assertEqual(block._virtualize(),
                          [(self.ws[3], self.ws[3], self.ws[3], self.ws[3]),
                           (self.ws[3], self.ws[3], self.ws[3], self.ws[3]),
@@ -403,15 +431,15 @@ class VirtualBlockTestCase(unittest.TestCase):
                           (self.ws[5], self.ws[5], self.ws[5], self.ws[5])])
 
     def test_materialization(self):
-        block = CriticalBlock(self.layout, False, 0, 0, 8, 8)
+        block = RecBlock(self.layout, False, 0, 0, 8, 8)
         virtual = block._virtualize()
         self.assertEqual(
-            list(CriticalBlock.materialize_virtual_block(0, 0, virtual)),
+            list(RecBlock._materialize_virtual_block(0, 0, virtual)),
             [(w, self.layout._get_item_position(w, False)) for w in self.ws]
         )
 
     def test_displaced_materialization(self):
-        block = CriticalBlock(self.layout, False, 0, 0, 8, 8)
+        block = RecBlock(self.layout, False, 0, 0, 8, 8)
         virtual = block._virtualize()
         offset = (1, 2)
         expected = [(w, self.layout._get_item_position(w, False))
@@ -421,18 +449,18 @@ class VirtualBlockTestCase(unittest.TestCase):
             expected[i] = (widget, (pos[0] + offset[0], pos[1] + offset[1],
                                     pos[2], pos[3]))
         self.assertEqual(
-            list(CriticalBlock.materialize_virtual_block(*offset, virtual)),
+            list(RecBlock._materialize_virtual_block(*offset, virtual)),
             expected
         )
 
     def test_shrink_failure(self):
-        block = CriticalBlock(self.layout, False, 0, 0, 8, 8)
+        block = RecBlock(self.layout, False, 0, 0, 8, 8)
         with self.assertRaises(SplitLimitException):
             block.displace_and_resize(0, -5)
 
     def test_displace_and_resize(self):
         l = self.ws
-        block = CriticalBlock(self.layout, False, 0, 0, 8, 8)
+        block = RecBlock(self.layout, False, 0, 0, 8, 8)
         block.displace_and_resize(4, -4)
         block = RecBlock(self.layout, False, 0, 0, 8, 8)
         self.assertEqual(block._virtualize(),
@@ -441,7 +469,7 @@ class VirtualBlockTestCase(unittest.TestCase):
                           (None, None, None, None, None, None, None, None),
                           (None, None, None, None, None, None, None, None),
                           (l[0], l[0], l[1], l[1], l[1], l[1], l[1], l[1]),
-                          (l[0], l[0], l[2], l[2], l[3], l[3], l[3], l[3]),
+                          (l[0], l[0], l[2], None, l[3], l[3], l[3], l[3]),
                           (l[4], l[4], l[4], l[4], l[3], l[3], l[3], l[3]),
                           (l[4], l[4], l[4], l[4], l[5], l[5], l[5], l[5])])
         block.displace_and_resize(-2, 2)
@@ -451,13 +479,130 @@ class VirtualBlockTestCase(unittest.TestCase):
                           (None, None, None, None, None, None, None, None),
                           (l[0], l[0], l[1], l[1], l[1], l[1], l[1], l[1]),
                           (l[0], l[0], l[1], l[1], l[1], l[1], l[1], l[1]),
-                          (l[0], l[0], l[2], l[2], l[3], l[3], l[3], l[3]),
-                          (l[0], l[0], l[2], l[2], l[3], l[3], l[3], l[3]),
+                          (l[0], l[0], l[2], None, l[3], l[3], l[3], l[3]),
+                          (l[0], l[0], l[2], None, l[3], l[3], l[3], l[3]),
                           (l[4], l[4], l[4], l[4], l[3], l[3], l[3], l[3]),
                           (l[4], l[4], l[4], l[4], l[5], l[5], l[5], l[5])])
 
 
+class CriticalBlockTestCase(unittest.TestCase):
+
+    #  ┌───────┬───────┬───────┬───────┬───────┬───────┐
+    #  │       │       │       │       │       │   5   │
+    #  │   0   │       │       │       │   4   ├───────┤
+    #  │       │   1   │   2   │   3   │       │   6   │
+    #  ├───────┤       │       │       ├───────┼───────┤
+    #  │░░░░░░░│       │       │       │       │   9   │
+    #  ├───────┼───────┼───────┼───┬───┤       ├───────┤
+    #  │       │       │       │░░░│   │   8   │       │
+    #  │  10   │  11   │   7   │░░░│12 │       │  13   │
+    #  │       │       │       │░░░│   │       │       │
+    #  ├───────┴───────┴───────┴───┴───┴───────┴───────┤
+    #  │                                               │
+    #  │                      28                       │
+    #  │                                               │
+    #  ├───────┬───────┬───────┬───┬───┬───────┬───────┤
+    #  │       │       │       │░░░│   │       │       │
+    #  │  14   │  15   │  16   │░░░│19 │       │  18   │
+    #  │       │       │       │░░░│   │  17   │       │
+    #  ├───────┼───────┼───────┼───┴───┤       ├───────┤
+    #  │       │░░░░░░░│       │       │       │  22   │
+    #  │       ├───────┤       │       ├───────┼───────┤
+    #  │  23   │       │  24   │  21   │       │  26   │
+    #  │       │  20   │       │       │  25   ├───────┤
+    #  │       │       │       │       │       │  27   │
+    #  └───────┴───────┴───────┴───────┴───────┴───────┘
+    def setUp(self):
+        self.app = QApplication([])
+        self.layout = get_empty_tiling_layout(12)
+        self.ws = [Widget(i) for i in range(29)]
+        self.layout.addWidget(self.ws[0], 0, 0, 2, 2)
+        self.layout.addWidget(self.ws[1], 0, 2, 3, 2)
+        self.layout.addWidget(self.ws[2], 0, 4, 3, 2)
+        self.layout.addWidget(self.ws[3], 0, 6, 3, 2)
+        self.layout.addWidget(self.ws[4], 0, 8, 2, 2)
+        self.layout.addWidget(self.ws[5], 0, 10, 1, 2)
+        self.layout.addWidget(self.ws[6], 1, 10, 1, 2)
+        self.layout.addWidget(self.ws[7], 3, 4, 2, 2)
+        self.layout.addWidget(self.ws[8], 2, 8, 3, 2)
+        self.layout.addWidget(self.ws[9], 2, 10, 1, 2)
+        self.layout.addWidget(self.ws[10], 3, 0, 2, 2)
+        self.layout.addWidget(self.ws[11], 3, 2, 2, 2)
+        self.layout.addWidget(self.ws[12], 3, 7, 2, 1)
+        self.layout.addWidget(self.ws[13], 3, 10, 2, 2)
+        self.layout.addWidget(self.ws[14], 7, 0, 2, 2)
+        self.layout.addWidget(self.ws[15], 7, 2, 2, 2)
+        self.layout.addWidget(self.ws[16], 7, 4, 2, 2)
+        self.layout.addWidget(self.ws[17], 7, 8, 3, 2)
+        self.layout.addWidget(self.ws[18], 7, 10, 2, 2)
+        self.layout.addWidget(self.ws[19], 7, 7, 2, 1)
+        self.layout.addWidget(self.ws[20], 10, 2, 2, 2)
+        self.layout.addWidget(self.ws[21], 9, 6, 3, 2)
+        self.layout.addWidget(self.ws[22], 9, 10, 1, 2)
+        self.layout.addWidget(self.ws[23], 9, 0, 3, 2)
+        self.layout.addWidget(self.ws[24], 9, 4, 3, 2)
+        self.layout.addWidget(self.ws[25], 10, 8, 2, 2)
+        self.layout.addWidget(self.ws[26], 10, 10, 1, 2)
+        self.layout.addWidget(self.ws[27], 11, 10, 1, 2)
+        self.layout.addWidget(self.ws[28], 5, 0, 2, 12)
+
+    def test_valid_block(self):
+        p =(7, 8, 5, 4)
+        block = CriticalBlock(self.layout, False, *p)
+        self.assertEqual((block.i, block.j, block.rowspan, block.colspan), p)
+
+    def test_invalid_block(self):
+        p =(7, 6, 5, 6)
+        with self.assertRaises(EmptySpaceInCriticalBlockException):
+            CriticalBlock(self.layout, False, *p)
+
+    def test_build_up(self):
+        with self.assertRaises(ImpossibleToBuildBlockException):
+            CriticalBlock.build_from_point(self.layout, False, 12, 0, 4, True)
+        self.assertEqual(
+            CriticalBlock.build_from_point(self.layout, False, 12, 4, 4, True),
+            CriticalBlock(self.layout, False, 9, 4, 3, 4)
+        )
+        self.assertEqual(
+            CriticalBlock.build_from_point(self.layout, False, 12, 8, 4, True),
+            CriticalBlock(self.layout, False, 7, 8, 5, 4)
+        )
+        self.assertEqual(
+            CriticalBlock.build_from_point(self.layout, False, 5, 0, 4, True),
+            CriticalBlock(self.layout, False, 3, 0, 2, 4)
+        )
+        with self.assertRaises(ImpossibleToBuildBlockException):
+            CriticalBlock.build_from_point(self.layout, False, 5, 4, 4, True)
+        self.assertEqual(
+            CriticalBlock.build_from_point(self.layout, False, 5, 8, 4, True),
+            CriticalBlock(self.layout, False, 0, 8, 5, 4)
+        )
+
+    def test_build_down(self):
+        with self.assertRaises(ImpossibleToBuildBlockException):
+            CriticalBlock.build_from_point(self.layout, False, 0, 0, 4, False)
+        self.assertEqual(
+            CriticalBlock.build_from_point(self.layout, False, 0, 4, 4, False),
+            CriticalBlock(self.layout, False, 0, 4, 3, 4)
+        )
+        self.assertEqual(
+            CriticalBlock.build_from_point(self.layout, False, 0, 8, 4, False),
+            CriticalBlock(self.layout, False, 0, 8, 5, 4)
+        )
+        self.assertEqual(
+            CriticalBlock.build_from_point(self.layout, False, 7, 0, 4, False),
+            CriticalBlock(self.layout, False, 7, 0, 2, 4)
+        )
+        with self.assertRaises(ImpossibleToBuildBlockException):
+            CriticalBlock.build_from_point(self.layout, False, 7, 4, 4, False)
+        self.assertEqual(
+            CriticalBlock.build_from_point(self.layout, False, 7, 8, 4, False),
+            CriticalBlock(self.layout, False, 7, 8, 5, 4)
+        )
+
+
 class BlockTestCase(unittest.TestCase):
+
     #  ┌───────────┐
     #  │░░░░░░░░░░░│
     #  │░░░░░░░┌───┤
