@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 from tilinglayout import (QTilingLayout, EmptyBlock, SplitLimitException,
                           WidgetInEmptyBlockException, CriticalBlock, RecBlock,
                           EmptySpaceInCriticalBlockException, Block,
-                          PointOutsideGridException)
+                          PointOutsideGridException, WidgetOverlapException)
 
 
 class Widget(QWidget):
@@ -24,7 +24,7 @@ class Widget(QWidget):
         return 'Widget: {}'.format(self.name)
 
     def __repr__(self):
-        return 'Widget: {}'.format(self.name)
+        return self.__str__()
 
 
 @unittest.skipUnless('RandomSplitsTestCase' in sys.argv,
@@ -114,6 +114,13 @@ class TransposedMethodsTestCase(unittest.TestCase):
         )
         self.layout.removeWidget(widget)
 
+    def test_failed_add_widget(self):
+        widget = Widget('new')
+        with self.assertRaises(WidgetOverlapException):
+            self.layout._add_widget(widget, 1, 1, 2, 2, False)
+        with self.assertRaises(WidgetOverlapException):
+            self.layout._add_widget(widget, -1, -1, 2, 2, False)
+
     def test_item_at_position(self):
         for i in range(self.layout.rowCount()):
             for j in range(self.layout.columnCount()):
@@ -121,6 +128,24 @@ class TransposedMethodsTestCase(unittest.TestCase):
                                  self.layout._item_at_position(i, j, False))
                 self.assertEqual(self.layout.itemAtPosition(j, i),
                                  self.layout._item_at_position(i, j, True))
+
+    def test_failed_item_at_position(self):
+        with self.assertRaises(PointOutsideGridException):
+            self.layout._item_at_position(-1, 0, False)
+        with self.assertRaises(PointOutsideGridException):
+            self.layout._item_at_position(0, -1, False)
+        with self.assertRaises(PointOutsideGridException):
+            self.layout._item_at_position(self.layout.max_span, 0, False)
+        with self.assertRaises(PointOutsideGridException):
+            self.layout._item_at_position(0, self.layout.max_span, False)
+        with self.assertRaises(PointOutsideGridException):
+            self.layout._item_at_position(-1, 0, True)
+        with self.assertRaises(PointOutsideGridException):
+            self.layout._item_at_position(0, -1, True)
+        with self.assertRaises(PointOutsideGridException):
+            self.layout._item_at_position(self.layout.max_span, 0, True)
+        with self.assertRaises(PointOutsideGridException):
+            self.layout._item_at_position(0, self.layout.max_span, True)
 
     def test_get_item_position(self):
         for widget in self.widgets:
@@ -133,6 +158,93 @@ class TransposedMethodsTestCase(unittest.TestCase):
                           QWidget(), False)
         self.assertRaises(ValueError, self.layout._get_item_position,
                           QWidget(), True)
+
+
+class StateTestCase(unittest.TestCase):
+
+    #  ┌───┬──────────┐
+    #  │   │    1     │
+    #  │ 0 ├───┬──────┤
+    #  │   │ 2 │      │
+    #  ├───┴───┤      │
+    #  │       │  3   │
+    #  │   4   │      │
+    #  │       │      │
+    #  └───────┴──────┘
+    def setUp(self):
+        self.app = QApplication([])
+        self.widgets = [Widget(i) for i in range(5)]
+        self.layout = get_empty_tiling_layout(4)
+        self.layout.addWidget(self.widgets[0], 0, 0, 2, 1)
+        self.layout.addWidget(self.widgets[1], 0, 1, 1, 3)
+        self.layout.addWidget(self.widgets[2], 1, 1, 1, 1)
+        self.layout.addWidget(self.widgets[3], 1, 2, 3, 2)
+        self.layout.addWidget(self.widgets[4], 2, 0, 2, 2)
+
+    def test_get_state(self):
+        self.assertEqual(self.layout._get_state(),
+                         [(self.widgets[0], (0, 0, 2, 1)),
+                          (self.widgets[1], (0, 1, 1, 3)),
+                          (self.widgets[2], (1, 1, 1, 1)),
+                          (self.widgets[3], (1, 2, 3, 2)),
+                          (self.widgets[4], (2, 0, 2, 2))])
+
+    def test_restore_state(self):
+        state = [(self.widgets[0], (0, 0, 3, 5)),
+                 (self.widgets[1], (3, 0, 2, 5))]
+        self.layout._restore_state(state)
+        self.assertEqual(
+            self.layout._get_item_position(self.widgets[0],  False),
+            (0, 0, 3, 5)
+        )
+        self.assertEqual(
+            self.layout._get_item_position(self.widgets[1],  False),
+            (3, 0, 2, 5)
+        )
+
+
+class SplitsTestCase(unittest.TestCase):
+
+    #  ┌───────┐
+    #  │       │
+    #  │   0   │
+    #  │       │
+    #  └───────┘
+    def setUp(self):
+        self.app = QApplication([])
+        self.ws = [Widget(i) for i in range(2)]
+        self.layout = get_empty_tiling_layout(2)
+        self.layout.addWidget(self.ws[0], 0, 0, 2, 2)
+
+    def test_hsplit_after(self):
+        self.layout.hsplit(self.ws[0], self.ws[1])
+        self.assertEqual(self.layout._get_item_position(self.ws[0], False),
+                         (0, 0, 1, 2))
+        self.assertEqual(self.layout._get_item_position(self.ws[1], False),
+                         (1, 0, 1, 2))
+
+    def test_hsplit_before(self):
+        self.layout.hsplit(self.ws[0], self.ws[1], True)
+        self.assertEqual(self.layout._get_item_position(self.ws[0], False),
+                         (1, 0, 1, 2))
+        self.assertEqual(self.layout._get_item_position(self.ws[1], False),
+                         (0, 0, 1, 2))
+
+    def test_vsplit_after(self):
+        self.layout.vsplit(self.ws[0], self.ws[1])
+        self.assertEqual(self.layout._get_item_position(self.ws[0], False),
+                         (0, 0, 2, 1))
+        self.assertEqual(self.layout._get_item_position(self.ws[1], False),
+                         (0, 1, 2, 1))
+
+    def test_vsplit_before(self):
+        self.layout.vsplit(self.ws[0], self.ws[1], True)
+        self.assertEqual(self.layout._get_item_position(self.ws[0], False),
+                         (0, 1, 2, 1))
+        self.assertEqual(self.layout._get_item_position(self.ws[1], False),
+                         (0, 0, 2, 1))
+
+
 
 
 class IndependentBlockTestCase(unittest.TestCase):
