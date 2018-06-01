@@ -11,7 +11,8 @@ sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 from tilinglayout import (QTilingLayout, EmptyBlock, SplitLimitException,
                           WidgetInEmptyBlockException, CriticalBlock, RecBlock,
                           EmptySpaceInCriticalBlockException, Block,
-                          PointOutsideGridException, WidgetOverlapException)
+                          PointOutsideGridException, WidgetOverlapException,
+                          InvalidBlockException)
 
 
 class Widget(QWidget):
@@ -454,6 +455,48 @@ class VirtualBlockTestCase(unittest.TestCase):
                           (l[0], l[0], l[2], l[2], l[3], l[3], l[3], l[3]),
                           (l[4], l[4], l[4], l[4], l[3], l[3], l[3], l[3]),
                           (l[4], l[4], l[4], l[4], l[5], l[5], l[5], l[5])])
+
+
+class BlockTestCase(unittest.TestCase):
+    #  ┌───────────┐
+    #  │░░░░░░░░░░░│
+    #  │░░░░░░░┌───┤
+    #  │░░░░░░░│ 0 │
+    #  │░░░┌───┴───┤
+    #  │░░░│   1   │
+    #  └───┴───────┘
+    def setUp(self):
+        self.app = QApplication([])
+        self.layout = get_empty_tiling_layout(3)
+        self.ws = [Widget(i) for i in range(2)]
+        self.layout.addWidget(self.ws[0], 1, 3, 1, 1)
+        self.layout.addWidget(self.ws[1], 2, 1, 1, 2)
+
+    def test_valid_block(self):
+        p =(0, 0, 3, 2)
+        block = Block(self.layout, False, *p)
+        self.assertEqual((block.i, block.j, block.rowspan, block.colspan), p)
+
+    def test_outside_block(self):
+        with self.assertRaises(InvalidBlockException):
+            Block(self.layout, False, -1, 0, 3, 3)
+        with self.assertRaises(InvalidBlockException):
+            Block(self.layout, False, 0, -1, 3, 3)
+        with self.assertRaises(InvalidBlockException):
+            Block(self.layout, False, 0, 0, 4, 3)
+        with self.assertRaises(InvalidBlockException):
+            Block(self.layout, False, 0, 0, 3, 4)
+
+    def test_no_area_block(self):
+        with self.assertRaises(InvalidBlockException):
+            Block(self.layout, False, 0, 0, 0, 3)
+        with self.assertRaises(InvalidBlockException):
+            Block(self.layout, False, 0, 0, 3, 0)
+
+
+    def test_repr(self):
+        block = Block(self.layout, False, 0, 1, 3, 2)
+        self.assertEqual(repr(block), 'Block: 0, 1, 3, 2')
 
 
 class EmptyBlockTestCase(unittest.TestCase):
