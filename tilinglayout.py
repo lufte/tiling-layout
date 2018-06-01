@@ -709,6 +709,7 @@ class CriticalBlock(RecBlock):
 
 
 class WidgetInEmptyBlockException(Exception):
+    """Raised when a widget is found inside an EmptyBlock"""
 
     def __init__(self, widget_pos, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -716,8 +717,19 @@ class WidgetInEmptyBlockException(Exception):
 
 
 class EmptyBlock(Block):
+    """A Block made entirely of empty space"""
 
     def __init__(self, layout, transpose, i, j, rowspan, colspan):
+        """Creates an Emptyblock.
+
+        Args:
+            layout: The QTilingLayout instance to work on.
+            transpose: If True, will behave as if the grid was transposed.
+            i: Row component of the top-left corner of the block.
+            j: Column component of the top-left corner of the block.
+            rowspan: The height of the block.
+            colspan: The width of the block.
+        """
         super().__init__(layout, transpose, i, j, rowspan, colspan)
         for row in range(self.i, self.i + self.rowspan):
             for col in range(self.j, self.j + self.colspan):
@@ -726,6 +738,11 @@ class EmptyBlock(Block):
 
     @classmethod
     def find_in_block(cls, domain):
+        """Finds an EmptyBlock in a particular sub-region of the layout.
+
+        Args:
+            domain: A Block instance in which to find the EmptyBlock.
+        """
         positions = (
             (row, col)
             for row in range(domain.i, domain.i + domain.rowspan)
@@ -747,6 +764,18 @@ class EmptyBlock(Block):
 
     @classmethod
     def build_from_point(cls, domain, i, j):
+        """Builds an EmptyBlock from the specified point.
+
+        The EmptyBlock will be constructed from the point to its right and
+        down. If the empty space has an irregular shape, the longest possible
+        valid block starting from this point will be returned.
+
+        Args:
+            domain: A Block instance in which to build the EmptyBlock. The
+                    EmptyBlock will be contained inside this domain.
+            i: The row component of the starting point.
+            j: The column component of the starting point.
+        """
         layout = domain.layout
         transpose = domain.transpose
         rowspan = colspan = 0
