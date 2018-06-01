@@ -463,8 +463,10 @@ class NonRectangularRecBlockException(Exception):
 
 
 class RecBlock(Block):
+    """A Block whose widgets are entirely contained in it."""
 
     def __init__(self, layout, transpose, i, j, rowspan, colspan):
+        """Builds a Block that no widget exceeds its limits."""
         super().__init__(layout, transpose, i, j, rowspan, colspan)
         index = self.i
         while index < self.i + self.rowspan:
@@ -517,18 +519,8 @@ class RecBlock(Block):
             else:
                 index += 1
 
-    def _virtualize(self):
-        return [
-            tuple(self.layout._item_at_position(row, col,
-                                                self.transpose).widget()
-                  if self.layout._item_at_position(row, col, self.transpose)
-                  else None
-                  for col in range(self.j, self.j + self.colspan))
-            for row in range(self.i, self.i + self.rowspan)
-        ]
-
     def get_widgets(self):
-        """Returns all widgets contained in this RecBlock"""
+        """Returns all widgets contained in this RecBlock."""
         #TODO: find a way to avoid looping over every row
         done = set()
         row = self.i
@@ -548,8 +540,25 @@ class RecBlock(Block):
                     col += 1
             row += 1
 
+    def _virtualize(self):
+        """Returns a virtualized version of the RecBlock.
+
+        A virtual block is a two-dimensional matrix with the same dimensions as
+        the represented block. Each cell contains either the instance of the
+        widget that occupies that position or None if it's empty.
+        """
+        return [
+            tuple(self.layout._item_at_position(row, col,
+                                                self.transpose).widget()
+                  if self.layout._item_at_position(row, col, self.transpose)
+                  else None
+                  for col in range(self.j, self.j + self.colspan))
+            for row in range(self.i, self.i + self.rowspan)
+        ]
+
     @staticmethod
-    def materialize_virtual_block(i, j, virtual_block):
+    def _materialize_virtual_block(i, j, virtual_block):
+        """Maps a virtual block to a list of tuples (widget, position)."""
         block = {}
         for row in range(len(virtual_block)):
             for col in range(len(virtual_block[0])):
@@ -569,6 +578,7 @@ class RecBlock(Block):
         return block.items()
 
     def displace_and_resize(self, displacement, growth):
+        """Vertically displaces and/or resizes the RecBlock."""
         heights = []
         virtual_block = self._virtualize()
         if growth:
@@ -621,8 +631,8 @@ class RecBlock(Block):
 
             virtual_block = new_virtual_block
 
-        materialized = self.materialize_virtual_block(self.i + displacement,
-                                                      self.j, virtual_block)
+        materialized = self._materialize_virtual_block(self.i + displacement,
+                                                       self.j, virtual_block)
         for widget, _ in materialized:
             self.layout.removeWidget(widget)
         for widget, pos in materialized:
