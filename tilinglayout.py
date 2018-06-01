@@ -92,13 +92,12 @@ class QTilingLayout(QGridLayout):
             col: Same as in QGridLayout.itemAtPosition.
             transpose: If True, will behave as if the grid was transposed.
         """
+        if not self._is_point_inside_grid(row, col):
+            raise PointOutsideGridException
+
         if not transpose:
-            if not self._is_point_inside_grid(row, col):
-                raise PointOutsideGridException
             return self.itemAtPosition(row, col)
         else:
-            if not self._is_point_inside_grid(col, row):
-                raise PointOutsideGridException
             return self.itemAtPosition(col, row)
 
     def _get_state(self):
