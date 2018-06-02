@@ -411,6 +411,7 @@ class HangingWidgetsTestCase(unittest.TestCase):
                          (2, 2, 1, 1))
         self.assertEqual(layout._get_item_position(widgets[1], False),
                          (2, 0, 1, 2))
+
     #  ┌───────┬───┐
     #  │░░░░░░░│ 0 │
     #  ├───────┼───┤
@@ -601,7 +602,7 @@ class BlockTestCase(unittest.TestCase):
         self.layout.addWidget(self.ws[1], 2, 1, 1, 2)
 
     def test_valid_block(self):
-        p =(0, 0, 3, 2)
+        p = (0, 0, 3, 2)
         block = Block(self.layout, False, *p)
         self.assertEqual((block.i, block.j, block.rowspan, block.colspan), p)
 
@@ -620,7 +621,6 @@ class BlockTestCase(unittest.TestCase):
             Block(self.layout, False, 0, 0, 0, 3)
         with self.assertRaises(InvalidBlockException):
             Block(self.layout, False, 0, 0, 3, 0)
-
 
     def test_repr(self):
         block = Block(self.layout, False, 0, 1, 3, 2)
@@ -658,7 +658,7 @@ class RecBlockTestCase(unittest.TestCase):
         self.layout.addWidget(self.ws[5], 6, 4, 2, 4)
 
     def test_valid_block(self):
-        p =(0, 0, 8, 8)
+        p = (0, 0, 8, 8)
         block = RecBlock(self.layout, False, *p)
         self.assertEqual((block.i, block.j, block.rowspan, block.colspan), p)
 
@@ -823,12 +823,12 @@ class CriticalBlockTestCase(unittest.TestCase):
         self.layout.addWidget(self.ws[28], 5, 0, 2, 12)
 
     def test_valid_block(self):
-        p =(7, 8, 5, 4)
+        p = (7, 8, 5, 4)
         block = CriticalBlock(self.layout, False, *p)
         self.assertEqual((block.i, block.j, block.rowspan, block.colspan), p)
 
     def test_invalid_block(self):
-        p =(7, 6, 5, 6)
+        p = (7, 6, 5, 6)
         with self.assertRaises(EmptySpaceInCriticalBlockException):
             CriticalBlock(self.layout, False, *p)
 
@@ -929,4 +929,5 @@ class EmptyBlockTestCase(unittest.TestCase):
                                                          0, 0, 1, 5)))
 
 
-if __name__ == '__main__': unittest.main()
+if __name__ == '__main__':
+    unittest.main()

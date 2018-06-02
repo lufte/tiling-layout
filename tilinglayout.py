@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QGridLayout, QWidget
+from PyQt5.QtWidgets import QGridLayout
 
 
 class SplitLimitException(Exception):
@@ -7,6 +7,7 @@ class SplitLimitException(Exception):
 
 class PointOutsideGridException(Exception):
     pass
+
 
 class WidgetOverlapException(Exception):
     pass
@@ -120,7 +121,7 @@ class QTilingLayout(QGridLayout):
     def delete_widget(self, widget):
         """Removes a widget from the layout and fills the remaining space"""
 
-        raise NotImplentedError
+        raise NotImplementedError
 
     def hsplit(self, old_widget, new_widget, put_before=False):
         """Splits the specified widget horizontally.
@@ -183,8 +184,8 @@ class QTilingLayout(QGridLayout):
             self._drop_hanging_widgets(ib)
             block_height = 1 + max(self._get_item_position(w, transpose)[0]
                                    for w, _ in widgets)
-            block_to_grow= RecBlock(self, transpose, ib.i, ib.j, block_height,
-                                    ib.colspan)
+            block_to_grow = RecBlock(self, transpose, ib.i, ib.j, block_height,
+                                     ib.colspan)
             block_to_grow.displace_and_resize(0, self.max_span - block_height)
             self._fill_spaces(ib)
         except SplitLimitException:
@@ -332,7 +333,8 @@ class QTilingLayout(QGridLayout):
                     try:
                         EmptyBlock(self, transpose, old_pos[0] + displacement,
                                    *old_pos[1:])
-                    except (WidgetInEmptyBlockException, InvalidBlockException):
+                    except (WidgetInEmptyBlockException,
+                            InvalidBlockException):
                         can_drop = False
 
                 if can_drop:
@@ -348,7 +350,6 @@ class QTilingLayout(QGridLayout):
                         self.removeWidget(supporter)
                     for supporter, old_pos in widgets:
                         self._add_widget(supporter, *old_pos, transpose)
-
 
     def _get_supporters(self, widget, transpose):
         """Returns a set of "support" widgets for the specified widget.
@@ -523,7 +524,7 @@ class RecBlock(Block):
 
     def get_widgets(self):
         """Returns all widgets contained in this RecBlock."""
-        #TODO: find a way to avoid looping over every row
+        # TODO: find a way to avoid looping over every row
         done = set()
         row = self.i
         while row < self.i + self.rowspan:
@@ -655,7 +656,7 @@ class CriticalBlock(RecBlock):
 
     def __init__(self, layout, transpose, i, j, rowspan, colspan):
         super().__init__(layout, transpose, i, j, rowspan, colspan)
-        #TODO: find a way to avoid looping over every row
+        # TODO: find a way to avoid looping over every row
         row = self.i
         while row < self.i + self.rowspan:
             col = self.j
