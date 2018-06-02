@@ -180,13 +180,13 @@ class QTilingLayout(QGridLayout):
                 for col in range(old_pos[1], old_pos[1] + old_pos[3]):
                     offsets[col] = row + 1
 
-            self._drop_hanging_widgets(ib, transpose)
+            self._drop_hanging_widgets(ib)
             block_height = 1 + max(self._get_item_position(w, transpose)[0]
                                    for w, _ in widgets)
             block_to_grow= RecBlock(self, transpose, ib.i, ib.j, block_height,
                                     ib.colspan)
             block_to_grow.displace_and_resize(0, self.max_span - block_height)
-            self._fill_spaces(ib, transpose)
+            self._fill_spaces(ib)
         except SplitLimitException:
             self._restore_state(original_state)
             raise
@@ -262,7 +262,7 @@ class QTilingLayout(QGridLayout):
         return CriticalBlock(self, transpose, 0, left, self.max_span,
                              right - left)
 
-    def _drop_hanging_widgets(self, domain, transpose):
+    def _drop_hanging_widgets(self, domain):
         """Moves widgets with lateral space down until that space is filled.
 
         A hanging widget is a widget with lateral space (to their left or
@@ -273,6 +273,7 @@ class QTilingLayout(QGridLayout):
             domain: A Block in which hanging widgets will be searched.
             transpose: If True, will behave as if the grid was transposed.
         """
+        transpose = domain.transpose
         for widget, pos in domain.get_widgets():
             left_space = (pos[1] > domain.j and not
                           self._item_at_position(pos[0], pos[1] - 1,
@@ -339,7 +340,7 @@ class QTilingLayout(QGridLayout):
                         self.removeWidget(supporter)
                         self._add_widget(supporter, old_pos[0] + displacement,
                                          *old_pos[1:], transpose)
-                    self._drop_hanging_widgets(domain, transpose)
+                    self._drop_hanging_widgets(domain)
                     return
                 else:
                     # Leave everything as it was before
@@ -373,7 +374,7 @@ class QTilingLayout(QGridLayout):
         return supporters.union(*(self._get_supporters(w, transpose)
                                   for w in supporters))
 
-    def _fill_spaces(self, domain, transpose):
+    def _fill_spaces(self, domain):
         """Searches EmptyBlocks inside domain and fills them.
 
         Args:
@@ -386,6 +387,7 @@ class QTilingLayout(QGridLayout):
             return
 
         # Find a CriticalBlock that can fill the EmptyBlock
+        transpose = domain.transpose
         try:
             cb = CriticalBlock.build_from_point(self, transpose, eb.i, eb.j,
                                                 eb.colspan, True)
@@ -418,7 +420,7 @@ class QTilingLayout(QGridLayout):
                                  right_w_pos[3] + eb.colspan, transpose)
         else:
             cb.displace_and_resize(0, eb.rowspan)
-        self._fill_spaces(domain, transpose)
+        self._fill_spaces(domain)
 
 
 class InvalidBlockException(Exception):
