@@ -4,17 +4,16 @@ import sys
 import os
 import unittest
 import random
-from unittest.mock import Mock, patch
+import types
 from PyQt5.QtWidgets import QWidget, QApplication
 
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
-from tilinglayout import (QTilingLayout, EmptyBlock, SplitLimitException,
+from tilinglayout import (QTilingLayout, EmptyBlock, InvalidBlockException,
                           WidgetInEmptyBlockException, CriticalBlock, RecBlock,
                           EmptySpaceInCriticalBlockException, Block,
                           PointOutsideGridException, WidgetOverlapException,
-                          InvalidBlockException,
-                          ImpossibleToBuildBlockException,
-                          NonRectangularRecBlockException)
+                          SplitLimitException, ImpossibleToBuildBlockException,
+                          SplitException, NonRectangularRecBlockException)
 
 
 class Widget(QWidget):
@@ -28,6 +27,57 @@ class Widget(QWidget):
 
     def __repr__(self):
         return self.__str__()
+
+
+class SplitExceptionTestCase(unittest.TestCase):
+
+    def test_init(self):
+        positions = [(0, 0, 1, 2), (1, 0, 1, 2)]
+
+        hsplit_ex = SplitException(positions, 0, 'hsplit')
+        self.assertEqual(hsplit_ex.positions, positions)
+        self.assertEqual(hsplit_ex.pos_index, 0)
+        self.assertEqual(hsplit_ex.operation, 'hsplit')
+        self.assertEqual(
+            str(hsplit_ex),
+            'Exception raised when performing a "hsplit" operation of the '
+            'widget positioned at (0, 0, 1, 2).\n'
+            'Positions:\n'
+            '(0, 0, 1, 2)\n'
+            '(1, 0, 1, 2)'
+        )
+
+        vsplit_ex = SplitException(positions, 0, 'vsplit')
+        self.assertEqual(vsplit_ex.positions, positions)
+        self.assertEqual(vsplit_ex.pos_index, 0)
+        self.assertEqual(vsplit_ex.operation, 'vsplit')
+        self.assertEqual(
+            str(vsplit_ex),
+            'Exception raised when performing a "vsplit" operation of the '
+            'widget positioned at (0, 0, 1, 2).\n'
+            'Positions:\n'
+            '(0, 0, 1, 2)\n'
+            '(1, 0, 1, 2)'
+        )
+
+        delete_ex = SplitException(positions, 0, 'delete')
+        self.assertEqual(delete_ex.positions, positions)
+        self.assertEqual(delete_ex.pos_index, 0)
+        self.assertEqual(delete_ex.operation, 'delete')
+        self.assertEqual(
+            str(delete_ex),
+            'Exception raised when performing a "delete" operation of the '
+            'widget positioned at (0, 0, 1, 2).\n'
+            'Positions:\n'
+            '(0, 0, 1, 2)\n'
+            '(1, 0, 1, 2)'
+        )
+
+    def test_invalid_operation(self):
+        with self.assertRaises(ValueError) as cm:
+            SplitException([], 0, 'split')
+        self.assertEqual(str(cm.exception), '"operation" must be one of '
+                                            "('vsplit', 'hsplit', 'delete')")
 
 
 @unittest.skipUnless('RandomSplitsTestCase' in sys.argv,
@@ -206,7 +256,6 @@ class StateTestCase(unittest.TestCase):
         )
 
 
-@unittest.skip('Until we finish coverage')
 class SplitsTestCase(unittest.TestCase):
 
     #  ┌───────┐
@@ -248,7 +297,21 @@ class SplitsTestCase(unittest.TestCase):
         self.assertEqual(self.layout._get_item_position(self.ws[1], False),
                          (0, 0, 2, 1))
 
+    def test_split_limit(self):
+        self.layout.hsplit(self.ws[0], self.ws[1])
+        with self.assertRaises(SplitLimitException):
+            self.layout.hsplit(self.ws[0], Widget(2))
 
+    def test_unexpected_error_in_split(self):
+        self.layout._get_item_position = types.MethodType(
+            lambda *args, **kwargs: 1/0,
+            self.layout
+        )
+        with self.assertRaises(SplitException) as cm:
+            self.layout.hsplit(self.ws[0], self.ws[1])
+        self.assertEqual(cm.exception.positions, [(0, 0, 2, 2)])
+        self.assertEqual(cm.exception.pos_index, 0)
+        self.assertEqual(cm.exception.operation, 'hsplit')
 
 
 class IndependentBlockTestCase(unittest.TestCase):
@@ -391,7 +454,6 @@ class HangingWidgetsTestCase(unittest.TestCase):
                          (1, 1, 1, 2))
 
 
-
 class SupportersTestCase(unittest.TestCase):
 
     #  ┌───────────────────┐
@@ -433,6 +495,136 @@ class SupportersTestCase(unittest.TestCase):
                          {self.ws[6]})
         self.assertEqual(self.layout._get_supporters(self.ws[6], False),
                          set())
+
+
+class FillSpacesTestCase(unittest.TestCase):
+
+    def setUp(self):
+        self.app = QApplication([])
+
+    #  ┌───┬───────┐
+    #  │ 0 │       │
+    #  ├───┤   1   │
+    #  │ 2 │       │
+    #  ├───┴───────┤
+    #  │░░░░░░░░░░░│
+    #  └───────────┘
+    def test_top_block(self):
+        layout = get_empty_tiling_layout(3)
+        widgets = [Widget(0), Widget(1), Widget(2)]
+        layout.addWidget(widgets[0], 0, 0, 1, 1)
+        layout.addWidget(widgets[1], 1, 0, 1, 1)
+        layout.addWidget(widgets[2], 0, 1, 2, 2)
+        layout._fill_spaces(RecBlock(layout, False, 0, 0, 3, 3))
+        self.assertEqual(layout._get_item_position(widgets[0], False),
+                         (0, 0, 2, 1))
+        self.assertEqual(layout._get_item_position(widgets[1], False),
+                         (2, 0, 1, 1))
+        self.assertEqual(layout._get_item_position(widgets[2], False),
+                         (0, 1, 3, 2))
+
+    #  ┌───────────┐
+    #  │     0     │
+    #  ├───┬───┬───┤
+    #  │ 1 │░░░│ 2 │
+    #  ├───┘░░░└───┤
+    #  │░░░░░░░░░░░│
+    #  └───────────┘
+    def test_left_block(self):
+        layout = get_empty_tiling_layout(3)
+        widgets = [Widget(0), Widget(1), Widget(2)]
+        layout.addWidget(widgets[0], 0, 0, 1, 3)
+        layout.addWidget(widgets[1], 1, 0, 1, 1)
+        layout.addWidget(widgets[2], 1, 2, 1, 1)
+        layout._fill_spaces(RecBlock(layout, False, 0, 0, 3, 3))
+        self.assertEqual(layout._get_item_position(widgets[0], False),
+                         (0, 0, 2, 3))
+        self.assertEqual(layout._get_item_position(widgets[1], False),
+                         (2, 0, 1, 2))
+        self.assertEqual(layout._get_item_position(widgets[2], False),
+                         (2, 2, 1, 1))
+
+    #  ┌───┬───────┐
+    #  │   │   1   │
+    #  │ 0 ├───┬───┤
+    #  │   │░░░│ 2 │
+    #  ├───┘░░░└───┤
+    #  │░░░░░░░░░░░│
+    #  └───────────┘
+    def test_right_block(self):
+        layout = get_empty_tiling_layout(3)
+        widgets = [Widget(0), Widget(1), Widget(2)]
+        layout.addWidget(widgets[0], 0, 0, 2, 1)
+        layout.addWidget(widgets[1], 0, 1, 1, 2)
+        layout.addWidget(widgets[2], 1, 2, 1, 1)
+        layout._fill_spaces(RecBlock(layout, False, 0, 0, 3, 3))
+        self.assertEqual(layout._get_item_position(widgets[0], False),
+                         (0, 0, 3, 1))
+        self.assertEqual(layout._get_item_position(widgets[1], False),
+                         (0, 1, 2, 2))
+        self.assertEqual(layout._get_item_position(widgets[2], False),
+                         (2, 1, 1, 2))
+
+    #  ┌───┬───────┐
+    #  │   │   1   │
+    #  │ 0 ├───┬───┤
+    #  │   │░░░│   │
+    #  ├───┼───┤ 2 │
+    #  │ 3 │ 4 │   │
+    #  └───┴───┴───┘
+    def test_no_suitable_block(self):
+        layout = get_empty_tiling_layout(3)
+        widgets = [Widget(0), Widget(1), Widget(2), Widget(3), Widget(4)]
+        layout.addWidget(widgets[0], 0, 0, 2, 1)
+        layout.addWidget(widgets[1], 0, 1, 1, 2)
+        layout.addWidget(widgets[2], 1, 2, 2, 1)
+        layout.addWidget(widgets[3], 2, 0, 1, 1)
+        layout.addWidget(widgets[4], 2, 1, 1, 1)
+        with self.assertRaises(ImpossibleToBuildBlockException):
+            layout._fill_spaces(RecBlock(layout, False, 0, 0, 3, 3))
+
+
+class BlockTestCase(unittest.TestCase):
+
+    #  ┌───────────┐
+    #  │░░░░░░░░░░░│
+    #  │░░░░░░░┌───┤
+    #  │░░░░░░░│ 0 │
+    #  │░░░┌───┴───┤
+    #  │░░░│   1   │
+    #  └───┴───────┘
+    def setUp(self):
+        self.app = QApplication([])
+        self.layout = get_empty_tiling_layout(3)
+        self.ws = [Widget(i) for i in range(2)]
+        self.layout.addWidget(self.ws[0], 1, 3, 1, 1)
+        self.layout.addWidget(self.ws[1], 2, 1, 1, 2)
+
+    def test_valid_block(self):
+        p =(0, 0, 3, 2)
+        block = Block(self.layout, False, *p)
+        self.assertEqual((block.i, block.j, block.rowspan, block.colspan), p)
+
+    def test_outside_block(self):
+        with self.assertRaises(InvalidBlockException):
+            Block(self.layout, False, -1, 0, 3, 3)
+        with self.assertRaises(InvalidBlockException):
+            Block(self.layout, False, 0, -1, 3, 3)
+        with self.assertRaises(InvalidBlockException):
+            Block(self.layout, False, 0, 0, 4, 3)
+        with self.assertRaises(InvalidBlockException):
+            Block(self.layout, False, 0, 0, 3, 4)
+
+    def test_no_area_block(self):
+        with self.assertRaises(InvalidBlockException):
+            Block(self.layout, False, 0, 0, 0, 3)
+        with self.assertRaises(InvalidBlockException):
+            Block(self.layout, False, 0, 0, 3, 0)
+
+
+    def test_repr(self):
+        block = Block(self.layout, False, 0, 1, 3, 2)
+        self.assertEqual(repr(block), 'Block: 0, 1, 3, 2')
 
 
 class RecBlockTestCase(unittest.TestCase):
@@ -683,49 +875,6 @@ class CriticalBlockTestCase(unittest.TestCase):
             CriticalBlock.build_from_point(self.layout, False, 7, 8, 4, False),
             CriticalBlock(self.layout, False, 7, 8, 5, 4)
         )
-
-
-class BlockTestCase(unittest.TestCase):
-
-    #  ┌───────────┐
-    #  │░░░░░░░░░░░│
-    #  │░░░░░░░┌───┤
-    #  │░░░░░░░│ 0 │
-    #  │░░░┌───┴───┤
-    #  │░░░│   1   │
-    #  └───┴───────┘
-    def setUp(self):
-        self.app = QApplication([])
-        self.layout = get_empty_tiling_layout(3)
-        self.ws = [Widget(i) for i in range(2)]
-        self.layout.addWidget(self.ws[0], 1, 3, 1, 1)
-        self.layout.addWidget(self.ws[1], 2, 1, 1, 2)
-
-    def test_valid_block(self):
-        p =(0, 0, 3, 2)
-        block = Block(self.layout, False, *p)
-        self.assertEqual((block.i, block.j, block.rowspan, block.colspan), p)
-
-    def test_outside_block(self):
-        with self.assertRaises(InvalidBlockException):
-            Block(self.layout, False, -1, 0, 3, 3)
-        with self.assertRaises(InvalidBlockException):
-            Block(self.layout, False, 0, -1, 3, 3)
-        with self.assertRaises(InvalidBlockException):
-            Block(self.layout, False, 0, 0, 4, 3)
-        with self.assertRaises(InvalidBlockException):
-            Block(self.layout, False, 0, 0, 3, 4)
-
-    def test_no_area_block(self):
-        with self.assertRaises(InvalidBlockException):
-            Block(self.layout, False, 0, 0, 0, 3)
-        with self.assertRaises(InvalidBlockException):
-            Block(self.layout, False, 0, 0, 3, 0)
-
-
-    def test_repr(self):
-        block = Block(self.layout, False, 0, 1, 3, 2)
-        self.assertEqual(repr(block), 'Block: 0, 1, 3, 2')
 
 
 class EmptyBlockTestCase(unittest.TestCase):
