@@ -308,6 +308,90 @@ class IndependentBlockTestCase(unittest.TestCase):
                          CriticalBlock(self.layout, False, 0, 5, 6, 1))
 
 
+class HangingWidgetsTestCase(unittest.TestCase):
+
+    def setUp(self):
+        self.app = QApplication([])
+
+    #  ┌───┬───────┐
+    #  │ 0 │░░░░░░░│
+    #  ├───┴───────┤
+    #  │░░░░░░░░░░░│
+    #  ├───┬───────┤
+    #  │░░░│   1   │
+    #  └───┴───────┘
+    def test_right_space(self):
+        layout = get_empty_tiling_layout(3)
+        widgets = [Widget(0), Widget(1)]
+        layout.addWidget(widgets[0], 0, 0, 1, 1)
+        layout.addWidget(widgets[1], 2, 1, 1, 2)
+        layout._drop_hanging_widgets(RecBlock(layout, False, 0, 0, 3, 3))
+        self.assertEqual(layout._get_item_position(widgets[0], False),
+                         (2, 0, 1, 1))
+        self.assertEqual(layout._get_item_position(widgets[1], False),
+                         (2, 1, 1, 2))
+
+    #  ┌───────┬───┐
+    #  │░░░░░░░│ 0 │
+    #  ├───────┴───┤
+    #  │░░░░░░░░░░░│
+    #  ├───────┬───┤
+    #  │   1   │░░░│
+    #  └───────┴───┘
+    def test_left_space(self):
+        layout = get_empty_tiling_layout(3)
+        widgets = [Widget(0), Widget(1)]
+        layout.addWidget(widgets[0], 0, 2, 1, 1)
+        layout.addWidget(widgets[1], 2, 0, 1, 2)
+        layout._drop_hanging_widgets(RecBlock(layout, False, 0, 0, 3, 3))
+        self.assertEqual(layout._get_item_position(widgets[0], False),
+                         (2, 2, 1, 1))
+        self.assertEqual(layout._get_item_position(widgets[1], False),
+                         (2, 0, 1, 2))
+    #  ┌───────┬───┐
+    #  │░░░░░░░│ 0 │
+    #  ├───────┼───┤
+    #  │░░░░░░░│ 1 │
+    #  ├───────┼───┤
+    #  │   2   │░░░│
+    #  └───────┴───┘
+    def test_not_enough_space(self):
+        layout = get_empty_tiling_layout(3)
+        widgets = [Widget(0), Widget(1), Widget(2)]
+        layout.addWidget(widgets[0], 0, 2, 1, 1)
+        layout.addWidget(widgets[1], 1, 2, 1, 1)
+        layout.addWidget(widgets[2], 2, 0, 1, 2)
+        layout._drop_hanging_widgets(RecBlock(layout, False, 0, 0, 3, 3))
+        self.assertEqual(layout._get_item_position(widgets[0], False),
+                         (0, 2, 1, 1))
+        self.assertEqual(layout._get_item_position(widgets[1], False),
+                         (2, 2, 1, 1))
+        self.assertEqual(layout._get_item_position(widgets[2], False),
+                         (2, 0, 1, 2))
+
+    #  ┌───┬───────┐
+    #  │ 0 │░░░░░░░│
+    #  ├───┼───────┤
+    #  │ 1 │   2   │
+    #  ├───┴───────┤
+    #  │░░░░░░░░░░░│
+    #  └───────────┘
+    def test_move_supporters(self):
+        layout = get_empty_tiling_layout(3)
+        widgets = [Widget(0), Widget(1), Widget(2)]
+        layout.addWidget(widgets[0], 0, 0, 1, 1)
+        layout.addWidget(widgets[1], 1, 0, 1, 1)
+        layout.addWidget(widgets[2], 1, 1, 1, 2)
+        layout._drop_hanging_widgets(RecBlock(layout, False, 0, 0, 3, 3))
+        self.assertEqual(layout._get_item_position(widgets[0], False),
+                         (1, 0, 1, 1))
+        self.assertEqual(layout._get_item_position(widgets[1], False),
+                         (2, 0, 1, 1))
+        self.assertEqual(layout._get_item_position(widgets[2], False),
+                         (1, 1, 1, 2))
+
+
+
 class SupportersTestCase(unittest.TestCase):
 
     #  ┌───────────────────┐
