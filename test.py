@@ -31,12 +31,25 @@ class Widget(QWidget):
 
 class SplitExceptionTestCase(unittest.TestCase):
 
-    def test_init(self):
-        positions = [(0, 0, 1, 2), (1, 0, 1, 2)]
+    #  ┌───┬───┐
+    #  │   │   │
+    #  │ 0 │ 1 │
+    #  │   │   │
+    #  └───┴───┘
+    def setUp(self):
+        self.app = QApplication([])
+        self.ws = [Widget(i) for i in range(2)]
+        self.layout = get_empty_tiling_layout(2)
+        self.layout.addWidget(self.ws[0], 0, 0, 2, 1)
+        self.layout.addWidget(self.ws[1], 0, 1, 2, 1)
 
-        hsplit_ex = SplitException(positions, 0, 'hsplit')
+    def test_init(self):
+        state = [('widget1', (0, 0, 1, 2)), ('widget2', (1, 0, 1, 2))]
+        positions = [pos for _, pos in state]
+
+        hsplit_ex = SplitException(state, 'widget1', 'hsplit')
         self.assertEqual(hsplit_ex.positions, positions)
-        self.assertEqual(hsplit_ex.pos_index, 0)
+        self.assertEqual(hsplit_ex.widget_pos, positions[0])
         self.assertEqual(hsplit_ex.operation, 'hsplit')
         self.assertEqual(
             str(hsplit_ex),
@@ -47,26 +60,26 @@ class SplitExceptionTestCase(unittest.TestCase):
             '(1, 0, 1, 2)'
         )
 
-        vsplit_ex = SplitException(positions, 0, 'vsplit')
+        vsplit_ex = SplitException(state, 'widget2', 'vsplit')
         self.assertEqual(vsplit_ex.positions, positions)
-        self.assertEqual(vsplit_ex.pos_index, 0)
+        self.assertEqual(vsplit_ex.widget_pos, positions[1])
         self.assertEqual(vsplit_ex.operation, 'vsplit')
         self.assertEqual(
             str(vsplit_ex),
             'Exception raised when performing a "vsplit" operation of the '
-            'widget positioned at (0, 0, 1, 2).\n'
+            'widget positioned at (1, 0, 1, 2).\n'
             'Positions:\n'
             '(0, 0, 1, 2)\n'
             '(1, 0, 1, 2)'
         )
 
-        delete_ex = SplitException(positions, 0, 'delete')
-        self.assertEqual(delete_ex.positions, positions)
-        self.assertEqual(delete_ex.pos_index, 0)
-        self.assertEqual(delete_ex.operation, 'delete')
+        remove_ex = SplitException(state, 'widget1', 'remove')
+        self.assertEqual(remove_ex.positions, positions)
+        self.assertEqual(remove_ex.widget_pos, positions[0])
+        self.assertEqual(remove_ex.operation, 'remove')
         self.assertEqual(
-            str(delete_ex),
-            'Exception raised when performing a "delete" operation of the '
+            str(remove_ex),
+            'Exception raised when performing a "remove" operation of the '
             'widget positioned at (0, 0, 1, 2).\n'
             'Positions:\n'
             '(0, 0, 1, 2)\n'
@@ -77,7 +90,40 @@ class SplitExceptionTestCase(unittest.TestCase):
         with self.assertRaises(ValueError) as cm:
             SplitException([], 0, 'split')
         self.assertEqual(str(cm.exception), '"operation" must be one of '
-                                            "('vsplit', 'hsplit', 'delete')")
+                                            "('vsplit', 'hsplit', 'remove')")
+
+    def test_spliterror_in_hsplit(self):
+        self.layout._get_item_position = types.MethodType(
+            lambda *args, **kwargs: 1/0,
+            self.layout
+        )
+        with self.assertRaises(SplitException) as cm:
+            self.layout.hsplit(self.ws[0], Widget('new'))
+        self.assertEqual(cm.exception.positions, [(0, 0, 2, 1), (0, 1, 2, 1)])
+        self.assertEqual(cm.exception.widget_pos, (0, 0, 2, 1))
+        self.assertEqual(cm.exception.operation, 'hsplit')
+
+    def test_spliterror_in_vsplit(self):
+        self.layout._get_item_position = types.MethodType(
+            lambda *args, **kwargs: 1/0,
+            self.layout
+        )
+        with self.assertRaises(SplitException) as cm:
+            self.layout.vsplit(self.ws[0], Widget('new'))
+        self.assertEqual(cm.exception.positions, [(0, 0, 2, 1), (0, 1, 2, 1)])
+        self.assertEqual(cm.exception.widget_pos, (0, 0, 2, 1))
+        self.assertEqual(cm.exception.operation, 'vsplit')
+
+    def test_spliterror_in_remove(self):
+        self.layout._get_item_position = types.MethodType(
+            lambda *args, **kwargs: 1/0,
+            self.layout
+        )
+        with self.assertRaises(SplitException) as cm:
+            self.layout.remove_widget(self.ws[0])
+        self.assertEqual(cm.exception.positions, [(0, 0, 2, 1), (0, 1, 2, 1)])
+        self.assertEqual(cm.exception.widget_pos, (0, 0, 2, 1))
+        self.assertEqual(cm.exception.operation, 'remove')
 
 
 @unittest.skipUnless('RandomSplitsTestCase' in sys.argv,
@@ -93,20 +139,22 @@ class RandomSplitsTestCase(unittest.TestCase):
         self.trace = []
 
     def test(self):
-        self._split(self.max_span, self.initial_positions, 0,
-                    random.randint(0, 1))
+        self._perform_operation(self.max_span, self.initial_positions, 0,
+                                random.choice(('vsplit', 'hsplit')))
 
-    def _split(self, max_span, positions, widget_to_split, split_horizontally):
-        self.trace.append((positions[widget_to_split], split_horizontally))
+    def _perform_operation(self, max_span, positions, widget, operation):
+        self.trace.append((positions[widget], operation))
         layout = QTilingLayout(self.widgets[0], max_span=max_span)
         layout.removeWidget(self.widgets[0])
         for i in range(len(positions)):
             layout._add_widget(self.widgets[i], *positions[i], False)
         try:
-            if split_horizontally:
-                layout.hsplit(self.widgets[widget_to_split], self.new_widget)
+            if operation == 'hsplit':
+                layout.hsplit(self.widgets[widget], self.new_widget)
+            elif operation == 'vsplit':
+                layout.vsplit(self.widgets[widget], self.new_widget)
             else:
-                layout.vsplit(self.widgets[widget_to_split], self.new_widget)
+                layout.remove_widget(self.widgets[widget])
         except SplitLimitException:
             return
         except Exception as e:
@@ -115,9 +163,11 @@ class RandomSplitsTestCase(unittest.TestCase):
             raise e
         new_positions = [layout.getItemPosition(i)
                          for i in range(layout.count())]
-        self._split(max_span, new_positions,
-                    random.randrange(len(new_positions)),
-                    random.randint(0, 1))
+        new_operations = (('vsplit', 'hsplit') if layout.count() == 1
+                          else ('vsplit', 'hsplit', 'remove'))
+        self._perform_operation(max_span, new_positions,
+                                random.randrange(len(new_positions)),
+                                random.choice(new_operations))
 
 
 def get_empty_tiling_layout(max_span):
@@ -302,16 +352,64 @@ class SplitsTestCase(unittest.TestCase):
         with self.assertRaises(SplitLimitException):
             self.layout.hsplit(self.ws[0], Widget(2))
 
-    def test_unexpected_error_in_split(self):
-        self.layout._get_item_position = types.MethodType(
-            lambda *args, **kwargs: 1/0,
-            self.layout
+
+class RemoveTestCase(unittest.TestCase):
+
+    #  ┌───┬──────────┐
+    #  │   │    1     │
+    #  │ 0 ├───┬──────┤
+    #  │   │ 2 │      │
+    #  ├───┴───┤      │
+    #  │       │  3   │
+    #  │   4   │      │
+    #  │       │      │
+    #  └───────┴──────┘
+    def setUp(self):
+        self.app = QApplication([])
+        self.widgets = [Widget(i) for i in range(5)]
+        self.layout = get_empty_tiling_layout(4)
+        self.layout.addWidget(self.widgets[0], 0, 0, 2, 1)
+        self.layout.addWidget(self.widgets[1], 0, 1, 1, 3)
+        self.layout.addWidget(self.widgets[2], 1, 1, 1, 1)
+        self.layout.addWidget(self.widgets[3], 1, 2, 3, 2)
+        self.layout.addWidget(self.widgets[4], 2, 0, 2, 2)
+
+    def test_horizontal_remove(self):
+        self.layout.remove_widget(self.widgets[0])
+        self.assertTrue(self.widgets[0].isHidden())
+        self.assertEqual(
+            self.layout._get_item_position(self.widgets[1], False),
+            (0, 0, 1, 4)
         )
-        with self.assertRaises(SplitException) as cm:
-            self.layout.hsplit(self.ws[0], self.ws[1])
-        self.assertEqual(cm.exception.positions, [(0, 0, 2, 2)])
-        self.assertEqual(cm.exception.pos_index, 0)
-        self.assertEqual(cm.exception.operation, 'hsplit')
+        self.assertEqual(
+            self.layout._get_item_position(self.widgets[2], False),
+            (1, 0, 1, 2)
+        )
+
+    def test_vertical_remove(self):
+        self.layout.remove_widget(self.widgets[4])
+        self.assertTrue(self.widgets[4].isHidden())
+        self.assertEqual(
+            self.layout._get_item_position(self.widgets[0], False),
+            (0, 0, 4, 1)
+        )
+        self.assertEqual(
+            self.layout._get_item_position(self.widgets[1], False),
+            (0, 1, 2, 3)
+        )
+        self.assertEqual(
+            self.layout._get_item_position(self.widgets[2], False),
+            (2, 1, 2, 1)
+        )
+        self.assertEqual(
+            self.layout._get_item_position(self.widgets[3], False),
+            (2, 2, 2, 2)
+        )
+
+    def test_remove_last_widget(self):
+        with self.assertRaises(SplitLimitException):
+            for widget in self.widgets:
+                self.layout.remove_widget(widget)
 
 
 class IndependentBlockTestCase(unittest.TestCase):
