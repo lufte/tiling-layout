@@ -2,7 +2,7 @@
 
 **tiling-layout** is a QtLayout that allows to split widgets in a vim-like fashion.
 
-![alt logo](https://raw.githubusercontent.com/lufte/tilinglayout/master/demo.gif)
+![alt demo](demo.gif?raw=true)
 
 ## Usage
 **tiling-layout** is currently written in Python3 and depends on PyQt5.
