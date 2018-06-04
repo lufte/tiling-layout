@@ -137,6 +137,13 @@ class QTilingLayout(QGridLayout):
             widget.hide()
             widgets = list(ib.get_widgets())
             self._rearrange_widgets(widgets, ib)
+            # Rearrange widgets in the opposite direction as the resizing
+            # results in some widgets sharing the space better with their
+            # neighbours
+            whole_block = CriticalBlock(self, not transpose, 0, 0,
+                                        self.max_span, self.max_span)
+            self._rearrange_widgets(list(whole_block.get_widgets()),
+                                    whole_block)
         except Exception as e:
             raise SplitException(original_state, widget, 'remove') from e
 

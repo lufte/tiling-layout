@@ -379,11 +379,19 @@ class RemoveTestCase(unittest.TestCase):
         self.assertTrue(self.widgets[0].isHidden())
         self.assertEqual(
             self.layout._get_item_position(self.widgets[1], False),
-            (0, 0, 1, 4)
+            (0, 0, 2, 4)
         )
         self.assertEqual(
             self.layout._get_item_position(self.widgets[2], False),
-            (1, 0, 1, 2)
+            (2, 0, 1, 2)
+        )
+        self.assertEqual(
+            self.layout._get_item_position(self.widgets[3], False),
+            (2, 2, 2, 2)
+        )
+        self.assertEqual(
+            self.layout._get_item_position(self.widgets[4], False),
+            (3, 0, 1, 2)
         )
 
     def test_vertical_remove(self):
@@ -391,19 +399,19 @@ class RemoveTestCase(unittest.TestCase):
         self.assertTrue(self.widgets[4].isHidden())
         self.assertEqual(
             self.layout._get_item_position(self.widgets[0], False),
-            (0, 0, 4, 1)
+            (0, 0, 4, 2)
         )
         self.assertEqual(
             self.layout._get_item_position(self.widgets[1], False),
-            (0, 1, 2, 3)
+            (0, 2, 2, 2)
         )
         self.assertEqual(
             self.layout._get_item_position(self.widgets[2], False),
-            (2, 1, 2, 1)
+            (2, 2, 2, 1)
         )
         self.assertEqual(
             self.layout._get_item_position(self.widgets[3], False),
-            (2, 2, 2, 2)
+            (2, 3, 2, 1)
         )
 
     def test_remove_last_widget(self):
