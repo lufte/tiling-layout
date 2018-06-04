@@ -16,26 +16,32 @@ class WidgetOverlapException(Exception):
 class SplitException(Exception):
     """Generic unexpected exception with useful debug information"""
 
-    def __init__(self, positions, pos_index, operation):
+    def __init__(self, state, widget, operation):
         """Creates a new SplitException
 
         Args:
-            positions: List of positions of all the widgets in the layout
-                       before the failed operation was executed.
-            pos_index: Index of the position of the affected widget in the
-                       previous list.
-            operation: 'vsplit', 'hsplit' or 'delete'
+            state: A list of widgets and positions as returned by _get_state.
+            widget: The widget on which the failed operation was being
+                    performed..
+            operation: 'vsplit', 'hsplit' or 'remove'
         """
-        valid_operations = ('vsplit', 'hsplit', 'delete')
+        valid_operations = ('vsplit', 'hsplit', 'remove')
         if operation not in valid_operations:
             raise ValueError('"operation" must be one of '
                              '{}'.format(valid_operations))
+        pos = None
+        positions = []
+        for tmp_widget, tmp_pos in state:
+            positions.append(tmp_pos)
+            if tmp_widget is widget:
+                pos = tmp_pos
+
         super().__init__('Exception raised when performing a "{}" operation '
                          'of the widget positioned at {}.\nPositions:\n'
-                         '{}'.format(operation, positions[pos_index],
+                         '{}'.format(operation, pos,
                                      '\n'.join(str(p) for p in positions)))
         self.positions = positions
-        self.pos_index = pos_index
+        self.widget_pos = pos
         self.operation = operation
 
 
@@ -103,7 +109,6 @@ class QTilingLayout(QGridLayout):
 
     def _get_state(self):
         """Returns every widget in the layout along with its position"""
-
         return [(self.itemAt(i).widget(), self.getItemPosition(i))
                 for i in range(self.count())]
 
@@ -118,10 +123,22 @@ class QTilingLayout(QGridLayout):
             widget.show()
             self.addWidget(widget, *pos)
 
-    def delete_widget(self, widget):
+    def remove_widget(self, widget):
         """Removes a widget from the layout and fills the remaining space"""
+        if self.count() == 1:
+            raise SplitLimitException
 
-        raise NotImplementedError
+        original_state = self._get_state()
+        try:
+            widget_pos = self._get_item_position(widget, False)
+            transpose = widget_pos[3] < widget_pos[2]
+            ib = self._get_independent_block(widget, transpose)
+            self.removeWidget(widget)
+            widget.hide()
+            widgets = list(ib.get_widgets())
+            self._rearrange_widgets(widgets, ib)
+        except Exception as e:
+            raise SplitException(original_state, widget, 'remove') from e
 
     def hsplit(self, old_widget, new_widget, put_before=False):
         """Splits the specified widget horizontally.
@@ -160,7 +177,6 @@ class QTilingLayout(QGridLayout):
         try:
             old_widget_pos = self._get_item_position(old_widget, transpose)
             ib = self._get_independent_block(old_widget, transpose)
-            offsets = [0] * self.max_span
             widgets = list(ib.get_widgets())
             for widget, _ in widgets:
                 self.removeWidget(widget)
@@ -170,40 +186,38 @@ class QTilingLayout(QGridLayout):
             else:
                 widgets.insert(widgets.index((old_widget, old_widget_pos)) + 1,
                                (new_widget, old_widget_pos))
-            for widget, old_pos in widgets:
-                row = max(offsets[old_pos[1]:old_pos[1] + old_pos[3]])
-
-                if row >= self.max_span:
-                    raise SplitLimitException
-
-                self._add_widget(widget, row, old_pos[1], 1, old_pos[3],
-                                 transpose)
-                for col in range(old_pos[1], old_pos[1] + old_pos[3]):
-                    offsets[col] = row + 1
-
-            self._drop_hanging_widgets(ib)
-            block_height = 1 + max(self._get_item_position(w, transpose)[0]
-                                   for w, _ in widgets)
-            block_to_grow = RecBlock(self, transpose, ib.i, ib.j, block_height,
-                                     ib.colspan)
-            block_to_grow.displace_and_resize(0, self.max_span - block_height)
-            self._fill_spaces(ib)
+            self._rearrange_widgets(widgets, ib)
         except SplitLimitException:
             self._restore_state(original_state)
             raise
         except Exception as e:
-            original_positions = []
-            pos_index = -1
-            for widget, pos in original_state:
-                original_positions.append(pos)
-                if widget is old_widget:
-                    pos_index = len(original_positions) - 1
+            raise SplitException(original_state, old_widget,
+                                 'vsplit' if transpose else 'hsplit') from e
 
-            raise SplitException(
-                original_positions,
-                pos_index,
-                'vsplit' if transpose else 'hsplit'
-            ) from e
+    def _rearrange_widgets(self, widgets, domain):
+        """Rearranges specified widgets after a split or deletion."""
+        offsets = [0] * self.max_span
+        transpose = domain.transpose
+        for widget, _ in widgets:
+            self.removeWidget(widget)
+        for widget, old_pos in widgets:
+            row = max(offsets[old_pos[1]:old_pos[1] + old_pos[3]])
+
+            if row >= self.max_span:
+                raise SplitLimitException
+
+            self._add_widget(widget, row, old_pos[1], 1, old_pos[3],
+                             transpose)
+            for col in range(old_pos[1], old_pos[1] + old_pos[3]):
+                offsets[col] = row + 1
+
+        self._drop_hanging_widgets(domain)
+        block_height = 1 + max(self._get_item_position(w, transpose)[0]
+                               for w, _ in widgets)
+        block_to_grow = RecBlock(self, transpose, domain.i, domain.j,
+                                 block_height, domain.colspan)
+        block_to_grow.displace_and_resize(0, self.max_span - block_height)
+        self._fill_spaces(domain)
 
     def _get_independent_block(self, widget, transpose):
         """Returns the independent block for the specified widget.
