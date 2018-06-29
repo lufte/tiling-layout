@@ -293,7 +293,6 @@ class QTilingLayout(QGridLayout):
 
         Args:
             domain: A Block in which hanging widgets will be searched.
-            transpose: If True, will behave as if the grid was transposed.
         """
         transpose = domain.transpose
         for widget, pos in domain.get_widgets():
@@ -401,7 +400,6 @@ class QTilingLayout(QGridLayout):
 
         Args:
             domain: A Block in which empty spaces will be searched.
-            transpose: If True, will behave as if the grid was transposed.
         """
         eb = EmptyBlock.find_in_block(domain)
 
