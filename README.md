@@ -15,6 +15,7 @@ To use the layout simply import the `QTilingLayout` class and create an instance
 * `hsplit` to split a widget horizontally.
 * `vsplit` to split a widget vertically.
 * `remove_widget` to remove a widget from the layout.
+
 Refer to the source file for detailed documentation on each method.
 
 ## Contributing
