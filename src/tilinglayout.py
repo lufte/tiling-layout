@@ -22,8 +22,8 @@ class SplitException(Exception):
         Args:
             state: A list of widgets and positions as returned by _get_state.
             widget: The widget on which the failed operation was being
-                    performed..
-            operation: 'vsplit', 'hsplit' or 'remove'
+                    performed.
+            operation: 'vsplit', 'hsplit' or 'remove'.
         """
         valid_operations = ('vsplit', 'hsplit', 'remove')
         if operation not in valid_operations:
