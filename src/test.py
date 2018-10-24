@@ -40,7 +40,7 @@ class SplitExceptionTestCase(unittest.TestCase):
     def setUp(self):
         self.app = QApplication([])
         self.ws = [Widget(i) for i in range(2)]
-        self.layout = get_empty_tiling_layout(2)
+        self.layout = QTilingLayout(max_span=2)
         self.layout.addWidget(self.ws[0], 0, 0, 2, 1)
         self.layout.addWidget(self.ws[1], 0, 1, 2, 1)
 
@@ -145,8 +145,7 @@ class RandomSplitsTestCase(unittest.TestCase):
 
     def _perform_operation(self, max_span, positions, widget, operation):
         self.trace.append((positions[widget], operation))
-        layout = QTilingLayout(self.widgets[0], max_span=max_span)
-        layout.removeWidget(self.widgets[0])
+        layout = QTilingLayout(max_span=max_span)
         for i in range(len(positions)):
             layout._add_widget(self.widgets[i], *positions[i], False)
         try:
@@ -171,13 +170,6 @@ class RandomSplitsTestCase(unittest.TestCase):
                                 random.choice(new_operations))
 
 
-def get_empty_tiling_layout(max_span):
-    mock_widget = QWidget()
-    layout = QTilingLayout(mock_widget, max_span=max_span)
-    layout.removeWidget(mock_widget)
-    return layout
-
-
 class TransposedMethodsTestCase(unittest.TestCase):
 
     #  ┌───┬──────────┐
@@ -192,7 +184,7 @@ class TransposedMethodsTestCase(unittest.TestCase):
     def setUp(self):
         self.app = QApplication([])
         self.widgets = [Widget(i) for i in range(5)]
-        self.layout = get_empty_tiling_layout(4)
+        self.layout = QTilingLayout(max_span=4)
         self.layout.addWidget(self.widgets[0], 0, 0, 2, 1)
         self.layout.addWidget(self.widgets[1], 0, 1, 1, 3)
         self.layout.addWidget(self.widgets[2], 1, 1, 1, 1)
@@ -278,7 +270,7 @@ class StateTestCase(unittest.TestCase):
     def setUp(self):
         self.app = QApplication([])
         self.widgets = [Widget(i) for i in range(5)]
-        self.layout = get_empty_tiling_layout(4)
+        self.layout = QTilingLayout(max_span=4)
         self.layout.addWidget(self.widgets[0], 0, 0, 2, 1)
         self.layout.addWidget(self.widgets[1], 0, 1, 1, 3)
         self.layout.addWidget(self.widgets[2], 1, 1, 1, 1)
@@ -317,7 +309,7 @@ class SplitsTestCase(unittest.TestCase):
     def setUp(self):
         self.app = QApplication([])
         self.ws = [Widget(i) for i in range(2)]
-        self.layout = get_empty_tiling_layout(2)
+        self.layout = QTilingLayout(max_span=2)
         self.layout.addWidget(self.ws[0], 0, 0, 2, 2)
 
     def test_hsplit_after(self):
@@ -368,7 +360,7 @@ class RemoveTestCase(unittest.TestCase):
     def setUp(self):
         self.app = QApplication([])
         self.widgets = [Widget(i) for i in range(5)]
-        self.layout = get_empty_tiling_layout(4)
+        self.layout = QTilingLayout(max_span=4)
         self.layout.addWidget(self.widgets[0], 0, 0, 2, 1)
         self.layout.addWidget(self.widgets[1], 0, 1, 1, 3)
         self.layout.addWidget(self.widgets[2], 1, 1, 1, 1)
@@ -415,11 +407,6 @@ class RemoveTestCase(unittest.TestCase):
             (2, 3, 2, 1)
         )
 
-    def test_remove_last_widget(self):
-        with self.assertRaises(SplitLimitException):
-            for widget in self.widgets:
-                self.layout.remove_widget(widget)
-
 
 class IndependentBlockTestCase(unittest.TestCase):
 
@@ -438,7 +425,7 @@ class IndependentBlockTestCase(unittest.TestCase):
     #  └───────────┴───────┴───┘
     def setUp(self):
         self.app = QApplication([])
-        self.layout = get_empty_tiling_layout(6)
+        self.layout = QTilingLayout(max_span=6)
         self.ws = [Widget(i) for i in range(11)]
         self.layout.addWidget(self.ws[0], 0, 0, 4, 1)
         self.layout.addWidget(self.ws[1], 0, 1, 2, 2)
@@ -491,7 +478,7 @@ class HangingWidgetsTestCase(unittest.TestCase):
     #  │░░░│   1   │
     #  └───┴───────┘
     def test_right_space(self):
-        layout = get_empty_tiling_layout(3)
+        layout = QTilingLayout(max_span=3)
         widgets = [Widget(0), Widget(1)]
         layout.addWidget(widgets[0], 0, 0, 1, 1)
         layout.addWidget(widgets[1], 2, 1, 1, 2)
@@ -509,7 +496,7 @@ class HangingWidgetsTestCase(unittest.TestCase):
     #  │   1   │░░░│
     #  └───────┴───┘
     def test_left_space(self):
-        layout = get_empty_tiling_layout(3)
+        layout = QTilingLayout(max_span=3)
         widgets = [Widget(0), Widget(1)]
         layout.addWidget(widgets[0], 0, 2, 1, 1)
         layout.addWidget(widgets[1], 2, 0, 1, 2)
@@ -527,7 +514,7 @@ class HangingWidgetsTestCase(unittest.TestCase):
     #  │   2   │░░░│
     #  └───────┴───┘
     def test_not_enough_space(self):
-        layout = get_empty_tiling_layout(3)
+        layout = QTilingLayout(max_span=3)
         widgets = [Widget(0), Widget(1), Widget(2)]
         layout.addWidget(widgets[0], 0, 2, 1, 1)
         layout.addWidget(widgets[1], 1, 2, 1, 1)
@@ -548,7 +535,7 @@ class HangingWidgetsTestCase(unittest.TestCase):
     #  │░░░░░░░░░░░│
     #  └───────────┘
     def test_move_supporters(self):
-        layout = get_empty_tiling_layout(3)
+        layout = QTilingLayout(max_span=3)
         widgets = [Widget(0), Widget(1), Widget(2)]
         layout.addWidget(widgets[0], 0, 0, 1, 1)
         layout.addWidget(widgets[1], 1, 0, 1, 1)
@@ -577,7 +564,7 @@ class SupportersTestCase(unittest.TestCase):
     #  └───────────────────┘
     def setUp(self):
         self.app = QApplication([])
-        self.layout = get_empty_tiling_layout(5)
+        self.layout = QTilingLayout(max_span=5)
         self.ws = [Widget(i) for i in range(7)]
         self.layout.addWidget(self.ws[0], 0, 0, 1, 5)
         self.layout.addWidget(self.ws[1], 1, 0, 3, 3)
@@ -618,7 +605,7 @@ class FillSpacesTestCase(unittest.TestCase):
     #  │░░░░░░░░░░░│
     #  └───────────┘
     def test_top_block(self):
-        layout = get_empty_tiling_layout(3)
+        layout = QTilingLayout(max_span=3)
         widgets = [Widget(0), Widget(1), Widget(2)]
         layout.addWidget(widgets[0], 0, 0, 1, 1)
         layout.addWidget(widgets[1], 1, 0, 1, 1)
@@ -639,7 +626,7 @@ class FillSpacesTestCase(unittest.TestCase):
     #  │░░░░░░░░░░░│
     #  └───────────┘
     def test_left_block(self):
-        layout = get_empty_tiling_layout(3)
+        layout = QTilingLayout(max_span=3)
         widgets = [Widget(0), Widget(1), Widget(2)]
         layout.addWidget(widgets[0], 0, 0, 1, 3)
         layout.addWidget(widgets[1], 1, 0, 1, 1)
@@ -660,7 +647,7 @@ class FillSpacesTestCase(unittest.TestCase):
     #  │░░░░░░░░░░░│
     #  └───────────┘
     def test_right_block(self):
-        layout = get_empty_tiling_layout(3)
+        layout = QTilingLayout(max_span=3)
         widgets = [Widget(0), Widget(1), Widget(2)]
         layout.addWidget(widgets[0], 0, 0, 2, 1)
         layout.addWidget(widgets[1], 0, 1, 1, 2)
@@ -681,7 +668,7 @@ class FillSpacesTestCase(unittest.TestCase):
     #  │ 3 │ 4 │   │
     #  └───┴───┴───┘
     def test_no_suitable_block(self):
-        layout = get_empty_tiling_layout(3)
+        layout = QTilingLayout(max_span=3)
         widgets = [Widget(0), Widget(1), Widget(2), Widget(3), Widget(4)]
         layout.addWidget(widgets[0], 0, 0, 2, 1)
         layout.addWidget(widgets[1], 0, 1, 1, 2)
@@ -703,7 +690,7 @@ class BlockTestCase(unittest.TestCase):
     #  └───┴───────┘
     def setUp(self):
         self.app = QApplication([])
-        self.layout = get_empty_tiling_layout(3)
+        self.layout = QTilingLayout(max_span=3)
         self.ws = [Widget(i) for i in range(2)]
         self.layout.addWidget(self.ws[0], 1, 3, 1, 1)
         self.layout.addWidget(self.ws[1], 2, 1, 1, 2)
@@ -755,7 +742,7 @@ class RecBlockTestCase(unittest.TestCase):
     #  └───────────────┴───────────────┘
     def setUp(self):
         self.app = QApplication([])
-        self.layout = get_empty_tiling_layout(8)
+        self.layout = QTilingLayout(max_span=8)
         self.ws = [Widget(i) for i in range(6)]
         self.layout.addWidget(self.ws[0], 0, 0, 3, 2)
         self.layout.addWidget(self.ws[1], 0, 2, 2, 6)
@@ -897,7 +884,7 @@ class CriticalBlockTestCase(unittest.TestCase):
     #  └───────┴───────┴───────┴───────┴───────┴───────┘
     def setUp(self):
         self.app = QApplication([])
-        self.layout = get_empty_tiling_layout(12)
+        self.layout = QTilingLayout(max_span=12)
         self.ws = [Widget(i) for i in range(29)]
         self.layout.addWidget(self.ws[0], 0, 0, 2, 2)
         self.layout.addWidget(self.ws[1], 0, 2, 3, 2)
@@ -1001,7 +988,7 @@ class EmptyBlockTestCase(unittest.TestCase):
     #  └───────────────────────┘
     def setUp(self):
         self.app = QApplication([])
-        self.layout = get_empty_tiling_layout(6)
+        self.layout = QTilingLayout(max_span=6)
         self.ws = [Widget(i) for i in range(8)]
         self.layout.addWidget(self.ws[0], 0, 0, 1, 5)
         self.layout.addWidget(self.ws[1], 1, 0, 4, 1)
@@ -1059,7 +1046,7 @@ class NeighbourTestCase(unittest.TestCase):
     #  └───────────────────────────────────┘
     def setUp(self):
         self.app = QApplication([])
-        self.layout = get_empty_tiling_layout(9)
+        self.layout = QTilingLayout(max_span=9)
         self.ws = [Widget(i) for i in range(19)]
         self.layout.addWidget(self.ws[0], 0, 0, 1, 2)
         self.layout.addWidget(self.ws[1], 0, 2, 1, 3)

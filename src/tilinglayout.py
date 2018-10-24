@@ -51,10 +51,11 @@ class SplitException(Exception):
 
 class QTilingLayout(QGridLayout):
 
-    def __init__(self, widget, *args, max_span=12, **kwargs):
+    def __init__(self, *args, initial_widget=None, max_span=12, **kwargs):
         super().__init__(*args, **kwargs)
         self.max_span = max_span
-        self.addWidget(widget, 0, 0, self.max_span, self.max_span)
+        if initial_widget:
+            self.addWidget(initial_widget, 0, 0, self.max_span, self.max_span)
 
     def _is_point_inside_grid(self, row, col):
         """Determines if the point is inside the layout."""
@@ -131,26 +132,26 @@ class QTilingLayout(QGridLayout):
     def remove_widget(self, widget):
         """Removes a widget from the layout and fills the remaining space"""
         if self.count() == 1:
-            raise SplitLimitException
-
-        original_state = self._get_state()
-        try:
-            widget_pos = self._get_item_position(widget, False)
-            transpose = widget_pos[3] < widget_pos[2]
-            ib = self._get_independent_block(widget, transpose)
             self.removeWidget(widget)
-            widget.hide()
-            widgets = list(ib.get_widgets())
-            self._rearrange_widgets(widgets, ib)
-            # Rearrange widgets in the opposite direction as the resizing
-            # results in some widgets sharing the space better with their
-            # neighbours
-            whole_block = CriticalBlock(self, not transpose, 0, 0,
-                                        self.max_span, self.max_span)
-            self._rearrange_widgets(list(whole_block.get_widgets()),
-                                    whole_block)
-        except Exception as e:
-            raise SplitException(original_state, widget, 'remove') from e
+        else:
+            original_state = self._get_state()
+            try:
+                widget_pos = self._get_item_position(widget, False)
+                transpose = widget_pos[3] < widget_pos[2]
+                ib = self._get_independent_block(widget, transpose)
+                self.removeWidget(widget)
+                widget.hide()
+                widgets = list(ib.get_widgets())
+                self._rearrange_widgets(widgets, ib)
+                # Rearrange widgets in the opposite direction as the resizing
+                # results in some widgets sharing the space better with their
+                # neighbours
+                whole_block = CriticalBlock(self, not transpose, 0, 0,
+                                            self.max_span, self.max_span)
+                self._rearrange_widgets(list(whole_block.get_widgets()),
+                                        whole_block)
+            except Exception as e:
+                raise SplitException(original_state, widget, 'remove') from e
 
     def hsplit(self, old_widget, new_widget, put_before=False):
         """Splits the specified widget horizontally.
