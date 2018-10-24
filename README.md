@@ -15,6 +15,7 @@ To use the layout simply import the `QTilingLayout` class and create an instance
 * `hsplit` to split a widget horizontally.
 * `vsplit` to split a widget vertically.
 * `remove_widget` to remove a widget from the layout.
+* `get_(left|top|right|bottom)_neighbour` to get the next widget in the requested direction that has the most cells in contact.
 
 Refer to the source file for detailed documentation on each method.
 

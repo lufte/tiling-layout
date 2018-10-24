@@ -13,6 +13,10 @@ class WidgetOverlapException(Exception):
     pass
 
 
+class WidgetNotInLayoutException(Exception):
+    pass
+
+
 class SplitException(Exception):
     """Generic unexpected exception with useful debug information"""
 
@@ -86,7 +90,8 @@ class QTilingLayout(QGridLayout):
         """
         index = self.indexOf(widget)
         if index < 0:
-            raise ValueError('QGridLayout.indexOf(widget) returned -1')
+            raise WidgetNotInLayoutException(
+                    'QGridLayout.indexOf(widget) returned -1')
         else:
             pos = self.getItemPosition(index)
             return pos if not transpose else (pos[1], pos[0], pos[3], pos[2])
@@ -169,6 +174,54 @@ class QTilingLayout(QGridLayout):
                         the old widget.
         """
         self._split(old_widget, new_widget, put_before, True)
+
+    def get_left_neighbour(self, widget):
+        return self._get_neighbour(widget, True, False)
+
+    def get_top_neighbour(self, widget):
+        return self._get_neighbour(widget, True, True)
+
+    def get_right_neighbour(self, widget):
+        return self._get_neighbour(widget, False, False)
+
+    def get_bottom_neighbour(self, widget):
+        return self._get_neighbour(widget, False, True)
+
+    def _get_neighbour(self, widget, left, transpose):
+        """Returns the neighbour widget in the requested direction.
+
+        The neighbour widget is the one that is in direct contact with the
+        requested widget in the requested direction. If there are more than one
+        widget, the one that has the most cells in contact is returned. If
+        there are more than one widget with the highest number of cells in
+        contact, the left-most one is returned.
+
+        Args:
+            widget: The widget of which to get the neighbour.
+            left: True to return the left neighbour, False to return the right
+                  one.
+            transpose: If True, will behave as if the grid was transposed.
+        """
+        best_neighbour = last_neighbour = None
+        max_contact = tmp_contact = 0
+        my_position = self._get_item_position(widget, transpose)
+        pivot = my_position[1] + (-1 if left else my_position[3])
+        try:
+            for row in range(my_position[0], my_position[0] + my_position[2]):
+                neighbour = self._item_at_position(row, pivot,
+                                                   transpose).widget()
+                if neighbour is last_neighbour:
+                    tmp_contact += 1
+                else:
+                    tmp_contact = 1
+                    last_neighbour = neighbour
+                if tmp_contact > max_contact:
+                    max_contact = tmp_contact
+                    best_neighbour = last_neighbour
+            return best_neighbour
+        except PointOutsideGridException:
+            return None
+
 
     def _split(self, old_widget, new_widget, put_before, transpose):
         """Splits the specified widget.

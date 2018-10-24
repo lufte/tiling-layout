@@ -13,7 +13,8 @@ from tilinglayout import (QTilingLayout, EmptyBlock, InvalidBlockException,
                           EmptySpaceInCriticalBlockException, Block,
                           PointOutsideGridException, WidgetOverlapException,
                           SplitLimitException, ImpossibleToBuildBlockException,
-                          SplitException, NonRectangularRecBlockException)
+                          SplitException, NonRectangularRecBlockException,
+                          WidgetNotInLayoutException)
 
 
 class Widget(QWidget):
@@ -257,10 +258,10 @@ class TransposedMethodsTestCase(unittest.TestCase):
                              self.layout._get_item_position(widget, False))
             self.assertEqual((pos[1], pos[0], pos[3], pos[2]),
                              self.layout._get_item_position(widget, True))
-        self.assertRaises(ValueError, self.layout._get_item_position,
-                          QWidget(), False)
-        self.assertRaises(ValueError, self.layout._get_item_position,
-                          QWidget(), True)
+        self.assertRaises(WidgetNotInLayoutException,
+                          self.layout._get_item_position, QWidget(), False)
+        self.assertRaises(WidgetNotInLayoutException,
+                          self.layout._get_item_position, QWidget(), True)
 
 
 class StateTestCase(unittest.TestCase):
@@ -1033,6 +1034,94 @@ class EmptyBlockTestCase(unittest.TestCase):
     def test_no_block(self):
         self.assertIsNone(EmptyBlock.find_in_block(Block(self.layout, False,
                                                          0, 0, 1, 5)))
+
+
+class NeighbourTestCase(unittest.TestCase):
+
+    #  ┌───────┬───────────┬───────┬───────┐
+    #  │   0   │    1      │   9   │   10  │
+    #  ├───┬───┴───────┬───┼───┬───┴───┬───┤
+    #  │   │           │ 4 │ 11│       │ 13│
+    #  │ 2 │           ├───┼───┤   12  ├───┤
+    #  │   │     3     │   │   │       │ 15│
+    #  ├───┤           │ 5 │ 14├───┬───┴───┤
+    #  │   │           │   │   │   │       │
+    #  │ 6 ├───────┬───┴───┤   │ 16│   17  │
+    #  │   │   7   │   8   │   │   │       │
+    #  ├───┴───────┴───────┴───┴───┴───────┤
+    #  │                                   │
+    #  │                                   │
+    #  │                                   │
+    #  │                18                 │
+    #  │                                   │
+    #  │                                   │
+    #  │                                   │
+    #  └───────────────────────────────────┘
+    def setUp(self):
+        self.app = QApplication([])
+        self.layout = get_empty_tiling_layout(9)
+        self.ws = [Widget(i) for i in range(19)]
+        self.layout.addWidget(self.ws[0], 0, 0, 1, 2)
+        self.layout.addWidget(self.ws[1], 0, 2, 1, 3)
+        self.layout.addWidget(self.ws[2], 1, 0, 2, 1)
+        self.layout.addWidget(self.ws[3], 1, 1, 3, 3)
+        self.layout.addWidget(self.ws[4], 1, 4, 1, 1)
+        self.layout.addWidget(self.ws[5], 2, 4, 2, 1)
+        self.layout.addWidget(self.ws[6], 3, 0, 2, 1)
+        self.layout.addWidget(self.ws[7], 4, 1, 1, 2)
+        self.layout.addWidget(self.ws[8], 4, 3, 1, 2)
+        self.layout.addWidget(self.ws[9], 0, 5, 1, 2)
+        self.layout.addWidget(self.ws[10], 0, 7, 1, 2)
+        self.layout.addWidget(self.ws[11], 1, 5, 1, 1)
+        self.layout.addWidget(self.ws[12], 1, 6, 2, 2)
+        self.layout.addWidget(self.ws[13], 1, 8, 1, 1)
+        self.layout.addWidget(self.ws[14], 2, 5, 3, 1)
+        self.layout.addWidget(self.ws[15], 2, 8, 1, 1)
+        self.layout.addWidget(self.ws[16], 3, 6, 2, 1)
+        self.layout.addWidget(self.ws[17], 3, 7, 2, 2)
+        self.layout.addWidget(self.ws[18], 5, 0, 4, 9)
+
+    def test_no_neighbour(self):
+        self.assertIsNone(self.layout.get_left_neighbour(self.ws[0]))
+        self.assertIsNone(self.layout.get_top_neighbour(self.ws[0]))
+        self.assertIsNone(self.layout.get_right_neighbour(self.ws[17]))
+        self.assertIsNone(self.layout.get_bottom_neighbour(self.ws[18]))
+
+    def test_invalid_widget(self):
+        with self.assertRaises(WidgetNotInLayoutException):
+            self.layout.get_left_neighbour(Widget(''))
+
+    def test_left_irregular_neighbour(self):
+        self.assertEqual(self.layout.get_left_neighbour(self.ws[3]),
+                         self.ws[2])
+
+    def test_top_irregular_neighbour(self):
+        self.assertEqual(self.layout.get_top_neighbour(self.ws[3]),
+                         self.ws[1])
+
+    def test_right_irregular_neighbour(self):
+        self.assertEqual(self.layout.get_right_neighbour(self.ws[3]),
+                         self.ws[5])
+
+    def test_bottom_irregular_neighbour(self):
+        self.assertEqual(self.layout.get_bottom_neighbour(self.ws[3]),
+                         self.ws[7])
+
+    def test_left_regular_neighbour(self):
+        self.assertEqual(self.layout.get_left_neighbour(self.ws[12]),
+                         self.ws[11])
+
+    def test_top_regular_neighbour(self):
+        self.assertEqual(self.layout.get_top_neighbour(self.ws[12]),
+                         self.ws[9])
+
+    def test_right_regular_neighbour(self):
+        self.assertEqual(self.layout.get_right_neighbour(self.ws[12]),
+                         self.ws[13])
+
+    def test_bottom_regular_neighbour(self):
+        self.assertEqual(self.layout.get_bottom_neighbour(self.ws[12]),
+                         self.ws[16])
 
 
 if __name__ == '__main__':
