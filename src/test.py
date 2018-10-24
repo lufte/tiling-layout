@@ -816,8 +816,8 @@ class RecBlockTestCase(unittest.TestCase):
         block = RecBlock(self.layout, False, 0, 0, 8, 8)
         virtual = block._virtualize()
         self.assertEqual(
-            list(RecBlock._materialize_virtual_block(0, 0, virtual)),
-            [(w, self.layout._get_item_position(w, False)) for w in self.ws]
+            set(RecBlock._materialize_virtual_block(0, 0, virtual)),
+            {(w, self.layout._get_item_position(w, False)) for w in self.ws}
         )
 
     def test_displaced_materialization(self):
@@ -831,8 +831,8 @@ class RecBlockTestCase(unittest.TestCase):
             expected[i] = (widget, (pos[0] + offset[0], pos[1] + offset[1],
                                     pos[2], pos[3]))
         self.assertEqual(
-            list(RecBlock._materialize_virtual_block(*offset, virtual)),
-            expected
+            set(RecBlock._materialize_virtual_block(*offset, virtual)),
+            set(expected)
         )
 
     def test_shrink_failure(self):
